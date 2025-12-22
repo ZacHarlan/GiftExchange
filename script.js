@@ -6,11 +6,12 @@
 // --- Domain Models ---
 
 class Person {
-    constructor(firstName, lastName, familyGroup) {
+    constructor(firstName, lastName, familyGroup, wishlist) {
         this.firstName = firstName.trim();
         this.lastName = lastName.trim();
         // Default familyGroup to lastName if not provided
         this.familyGroup = (familyGroup && familyGroup.trim()) ? familyGroup.trim() : this.lastName;
+        this.wishlist = wishlist ? wishlist.trim() : '';
     }
 
     getFullName() {
@@ -62,11 +63,11 @@ class GiftExchangeService {
         return this.coreFamilySet.has(String(lastName).toLowerCase());
     }
 
-    addPerson(firstName, lastName, familyGroup) {
+    addPerson(firstName, lastName, familyGroup, wishlist) {
         if (this.isNameTaken(firstName, lastName)) {
             throw new Error(`"${firstName} ${lastName}" is already on the list.`);
         }
-        const person = new Person(firstName, lastName, familyGroup);
+        const person = new Person(firstName, lastName, familyGroup, wishlist);
         this.names.push(person);
         return person;
     }
@@ -178,8 +179,8 @@ class GiftExchangeService {
         if (!isValid) return null;
 
         return givers.map((giver, i) => ({
-            giver: giver.getFullName(),
-            receiver: receivers[i].getFullName()
+            giver: giver,
+            receiver: receivers[i]
         }));
     }
 }
@@ -349,6 +350,7 @@ class UIManager {
         this.firstNameInput = document.getElementById('firstNameInput');
         this.lastNameInput = document.getElementById('lastNameInput');
         this.groupInput = document.getElementById('groupInput');
+        this.wishlistInput = document.getElementById('wishlistInput');
         this.addBtn = document.getElementById('addBtn');
         this.nameList = document.getElementById('nameList');
         this.shuffleBtn = document.getElementById('shuffleBtn');
@@ -392,6 +394,9 @@ class UIManager {
             if (e.key === 'Enter') this.groupInput.focus();
         });
         this.groupInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.wishlistInput.focus();
+        });
+        this.wishlistInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.handleAddName();
         });
 
@@ -512,6 +517,7 @@ class UIManager {
         const firstName = this.firstNameInput.value.trim();
         const lastName = this.lastNameInput.value.trim();
         const group = this.groupInput.value.trim();
+        const wishlist = this.wishlistInput.value.trim();
 
         if (!firstName || !lastName) {
             this.showError('Please enter both First Name and Last Name.');
@@ -519,10 +525,11 @@ class UIManager {
         }
 
         try {
-            this.exchangeService.addPerson(firstName, lastName, group);
+            this.exchangeService.addPerson(firstName, lastName, group, wishlist);
             this.firstNameInput.value = '';
             this.lastNameInput.value = '';
             this.groupInput.value = '';
+            this.wishlistInput.value = '';
             this.errorMsg.classList.remove('visible');
             this.renderList();
             this.updateButtons();
@@ -577,13 +584,20 @@ class UIManager {
                 text = text.replace(groupMatch[0], '').trim();
             }
 
+            let wishlist = '';
+            const wishlistMatch = text.match(/\{(.*?)\}/);
+            if (wishlistMatch) {
+                wishlist = wishlistMatch[1].trim();
+                text = text.replace(wishlistMatch[0], '').trim();
+            }
+
             const parts = text.split(/\s+/);
             if (parts.length >= 2) {
                 const lastName = parts.pop();
                 const firstName = parts.join(' ');
 
                 try {
-                    this.exchangeService.addPerson(firstName, lastName, group);
+                    this.exchangeService.addPerson(firstName, lastName, group, wishlist);
                     addedCount++;
                 } catch (e) {
                     // Ignore duplicates in bulk or handle silently
@@ -608,7 +622,12 @@ class UIManager {
         document.querySelectorAll('.result-card').forEach(card => {
             const giver = card.querySelector('.giver').textContent;
             const receiver = card.querySelector('.receiver').textContent;
-            results.push(`${giver} -> ${receiver}`);
+            let line = `${giver} -> ${receiver}`;
+            const noteEl = card.querySelector('.wishlist-note');
+            if (noteEl) {
+                line += ` (${noteEl.textContent.trim()})`;
+            }
+            results.push(line);
         });
 
         const textToCopy = results.join('\n');
@@ -629,7 +648,12 @@ class UIManager {
         document.querySelectorAll('.result-card').forEach(card => {
             const giver = card.querySelector('.giver').textContent;
             const receiver = card.querySelector('.receiver').textContent;
-            results.push(`${giver} -> ${receiver}`);
+            let line = `${giver} -> ${receiver}`;
+            const noteEl = card.querySelector('.wishlist-note');
+            if (noteEl) {
+                line += ` (${noteEl.textContent.trim()})`;
+            }
+            results.push(line);
         });
 
         if (results.length === 0) return;
@@ -652,7 +676,7 @@ class UIManager {
             const groupDisplay = ` <small style="color: var(--gold); margin-left: 0.5rem;">${person.getDisplayGroup()}</small>`;
 
             li.innerHTML = `
-                <span>${person.getFullName()}${groupDisplay}</span>
+                <span>${person.getFullName()}${groupDisplay}${person.wishlist ? ' <span title="' + person.wishlist + '">🎁</span>' : ''}</span>
                 <button class="delete-btn" onclick="removeName(${index})" aria-label="Remove ${person.getFullName()}">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -668,10 +692,18 @@ class UIManager {
         assignments.forEach(pair => {
             const div = document.createElement('div');
             div.className = 'result-card';
+
+            const wishlistHtml = pair.receiver.wishlist
+                ? `<div class="wishlist-note" style="width: 100%; margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"><span style="color: var(--gold);">🎁 Wishlist:</span> ${pair.receiver.wishlist}</div>`
+                : '';
+
+            div.style.flexWrap = 'wrap';
+
             div.innerHTML = `
-                <span class="giver">${pair.giver}</span>
+                <span class="giver">${pair.giver.getFullName()}</span>
                 <span class="arrow">→</span>
-                <span class="receiver">${pair.receiver}</span>
+                <span class="receiver">${pair.receiver.getFullName()}</span>
+                ${wishlistHtml}
             `;
             this.resultsList.appendChild(div);
         });
