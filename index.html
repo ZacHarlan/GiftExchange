@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gift Exchange</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Playfair+Display:ital,wght@0,600;1,600&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-animation"></div>
+    <main class="container">
+        <header>
+            <h1>Holiday Gift Exchange</h1>
+            <p>Enter names to draw your Secret Santa!</p>
+        </header>
+
+        <section class="input-section">
+            <div class="input-group">
+                <input type="text" id="firstNameInput" placeholder="First Name" autocomplete="off">
+                <input type="text" id="lastNameInput" placeholder="Last Name" autocomplete="off">
+                <input type="text" id="groupInput" placeholder="Family Group (Optional)" autocomplete="off">
+                <button id="addBtn" aria-label="Add Name">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
+            <p id="errorMsg" class="error-msg"></p>
+
+            <div class="help-inline" style="margin-bottom: 1rem;">
+                <span style="color: var(--text-secondary); font-size: 0.9rem;">Family Group</span>
+                <details class="help-details">
+                    <summary aria-label="What is a family group?">?</summary>
+                    <div class="help-content">
+                        <p><strong>Family Group</strong> is the label used to prevent matches within the same
+                            household/family.</p>
+                        <p>People with the same Family Group will never be assigned to each other.</p>
+                        <p>If you leave it blank, it defaults to the person’s last name.</p>
+                    </div>
+                </details>
+            </div>
+
+            <div class="help-toggle-row" style="margin-bottom: 1rem;">
+                <button id="toggleBulkBtn" class="secondary-btn"
+                    style="font-size: 0.9rem; padding: 0.5rem 1rem; width: auto; margin-top: 0;">+ Bulk Import</button>
+                <details class="help-details">
+                    <summary aria-label="How does Bulk Import work?">?</summary>
+                    <div class="help-content">
+                        <p><strong>Bulk Import</strong> lets you paste a comma-separated list of people.</p>
+                        <p>Format: <strong>First Last</strong> and optionally <strong>[Family Group]</strong>.</p>
+                        <div class="help-sample">Alice A [GroupA], Bob B [GroupB], Chris C</div>
+                        <p>Edit the sample to match your group, then click <strong>Import Names</strong>.</p>
+                    </div>
+                </details>
+            </div>
+
+            <div id="bulkSection" class="hidden" style="margin-bottom: 1.5rem;">
+                <textarea id="bulkInput" placeholder="e.g. John Doe [Family A], Jane Doe [Family A]" rows="4"
+                    style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 12px; padding: 0.75rem; color: var(--text-primary); font-family: var(--font-body); resize: vertical; margin-bottom: 0.5rem;"></textarea>
+                <button id="importBtn" class="primary-btn">Import Names</button>
+            </div>
+
+            <div class="help-toggle-row" style="margin-bottom: 1rem;">
+                <button id="toggleSettingsBtn" class="secondary-btn"
+                    style="font-size: 0.9rem; padding: 0.5rem 1rem; width: auto; margin-top: 0;">Settings</button>
+            </div>
+
+            <div id="settingsSection" class="hidden" style="margin-bottom: 1.5rem;">
+                <div class="help-inline" style="margin-bottom: 0.5rem;">
+                    <span style="color: var(--text-secondary); font-size: 0.9rem;">Core Families</span>
+                    <details class="help-details">
+                        <summary aria-label="What is a core family?">?</summary>
+                        <div class="help-content">
+                            <p><strong>Core Families</strong> is an optional list of last names that form a “restricted
+                                pool”.</p>
+                            <p>If someone’s last name is in this list, they will only be matched with others in this
+                                list.</p>
+                            <p>Leave it blank if you don’t need this rule.</p>
+                        </div>
+                    </details>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <label for="themeSelect"
+                        style="display: block; color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Animation
+                        Theme</label>
+                    <select id="themeSelect"
+                        style="width: 100%; padding: 0.5rem; border-radius: 6px; background: rgba(0,0,0,0.2); color: var(--text-primary); border: 1px solid var(--card-border);">
+                        <option value="christmas">Christmas (Santa & Gifts)</option>
+                        <option value="hanukkah">Hanukkah (Dreidel & Menorah)</option>
+                    </select>
+                </div>
+                <input type="text" id="coreFamiliesInput" placeholder="Core family last names (comma separated)"
+                    autocomplete="off" style="width: 100%; margin-bottom: 0.5rem;">
+                <button id="saveCoreFamiliesBtn" class="primary-btn">Save</button>
+            </div>
+        </section>
+
+        <section class="list-section">
+            <ul id="nameList" class="name-list">
+                <!-- Names will appear here -->
+            </ul>
+        </section>
+
+        <section class="action-section">
+            <button id="shuffleBtn" class="primary-btn" disabled>Shuffle & Assign</button>
+            <button id="resetBtn" class="secondary-btn hidden">Start Over</button>
+        </section>
+
+        <section id="resultsSection" class="results-section hidden">
+            <h2>Assignments</h2>
+            <div id="resultsList" class="results-grid">
+                <!-- Results will appear here -->
+            </div>
+            <div class="result-actions" style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                <button id="reshuffleBtn" class="secondary-btn" style="margin-top: 0;">Reshuffle</button>
+                <button id="emailBtn" class="secondary-btn" style="margin-top: 0;">Email Results</button>
+                <button id="copyBtn" class="primary-btn">Copy Results</button>
+            </div>
+        </section>
+    </main>
+    <!-- Animation Overlay -->
+    <div id="loadingOverlay" class="overlay hidden">
+        <div class="gift-container"
+            style="position: relative; display: flex; justify-content: center; align-items: center; height: 150px;">
+            <svg id="giftIcon" width="120" height="120" viewBox="0 0 24 24" fill="none"
+                xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 12V22H4V12" stroke="#e11d48" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <path d="M22 7H2V12H22V7Z" stroke="#e11d48" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <path d="M12 22V7" stroke="#e11d48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path
+                    d="M12 7H7.5C6.83696 7 6.20107 6.73661 5.73223 6.26777C5.26339 5.79893 5 5.16304 5 4.5C5 3.83696 5.26339 3.20107 5.73223 2.73223C6.20107 2.26339 6.83696 2 7.5 2C11 2 12 7 12 7Z"
+                    stroke="#e11d48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path
+                    d="M12 7H16.5C17.163 7 17.7989 6.73661 18.2678 6.26777C18.7366 5.79893 19 5.16304 19 4.5C19 3.83696 18.7366 3.20107 18.2678 2.73223C17.7989 2.26339 17.163 2 16.5 2C13 2 12 7 12 7Z"
+                    stroke="#e11d48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <!-- Hanukkah Icons Container -->
+            <div id="hanukkahContainer" class="hidden" style="position: relative; width: 140px; height: 120px;">
+                <!-- Dreidel (Centered) -->
+                <svg id="hanukkahIcon" width="100" height="100" viewBox="0 0 24 24" fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);">
+                    <path d="M12 2L22 8.5V13L12 22L2 13V8.5L12 2Z" stroke="#3b82f6" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 22V8.5" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M22 8.5L12 8.5L2 8.5" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M12 8.5L17 5" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M12 8.5L7 5" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M12 2V5" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+                <!-- Menorah (Centered) -->
+                <svg id="menorahIcon" width="100" height="100" viewBox="0 0 24 24" fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);">
+                    <!-- Structure -->
+                    <path d="M2 18H22" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M12 2V18" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M8 6V18" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M16 6V18" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M4 10V18" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M20 10V18" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M4 10C4 10 6 13 8 13C10 13 12 10 12 10" stroke="#3b82f6" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 10C12 10 14 13 16 13C18 13 20 10 20 10" stroke="#3b82f6" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+
+                    <!-- Flames (Orange/Yellow) -->
+                    <g class="menorah-flames hidden">
+                        <circle cx="12" cy="1" r="1.5" fill="#fbbf24" class="flame" style="animation-delay: 0s" />
+                        <circle cx="8" cy="5" r="1.5" fill="#fbbf24" class="flame" style="animation-delay: 0.2s" />
+                        <circle cx="16" cy="5" r="1.5" fill="#fbbf24" class="flame" style="animation-delay: 0.4s" />
+                        <circle cx="4" cy="9" r="1.5" fill="#fbbf24" class="flame" style="animation-delay: 0.1s" />
+                        <circle cx="20" cy="9" r="1.5" fill="#fbbf24" class="flame" style="animation-delay: 0.3s" />
+                    </g>
+                </svg>
+
+                <!-- Latke Pan -->
+                <svg id="latkeIcon" width="100" height="100" viewBox="0 0 24 24" fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s;">
+                    <!-- Pan -->
+                    <circle cx="12" cy="12" r="8" stroke="#cbd5e1" stroke-width="2" fill="#1e293b" />
+                    <path d="M19 19L23 23" stroke="#cbd5e1" stroke-width="3" stroke-linecap="round" />
+                    <!-- Latkes -->
+                    <g class="latkes">
+                        <circle cx="10" cy="10" r="2" fill="#a16207" />
+                        <circle cx="14" cy="11" r="2" fill="#a16207" />
+                        <circle cx="12" cy="14" r="2" fill="#a16207" />
+                    </g>
+                </svg>
+
+                <!-- Gelt (Coins) -->
+                <svg id="geltIcon" width="100" height="100" viewBox="0 0 24 24" fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.3s;">
+                    <g class="coins">
+                        <!-- Stack -->
+                        <ellipse cx="12" cy="18" rx="6" ry="3" fill="#eab308" stroke="#a16207" stroke-width="1" />
+                        <ellipse cx="12" cy="16" rx="6" ry="3" fill="#facc15" stroke="#a16207" stroke-width="1" />
+                        <ellipse cx="12" cy="14" rx="6" ry="3" fill="#eab308" stroke="#a16207" stroke-width="1" />
+                        <ellipse cx="12" cy="12" rx="6" ry="3" fill="#facc15" stroke="#a16207" stroke-width="1" />
+                        <ellipse cx="12" cy="10" rx="6" ry="3" fill="#eab308" stroke="#a16207" stroke-width="1" />
+                        <!-- Falling Coin -->
+                        <ellipse cx="12" cy="6" rx="6" ry="3" fill="#fef08a" stroke="#a16207" stroke-width="1"
+                            class="falling-coin" />
+                    </g>
+                </svg>
+            </div>
+        </div>
+        <p id="loadingText" class="loading-text">Checking Naughty List...</p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
