@@ -21,6 +21,7 @@ function setupDOM() {
         <input id="firstNameInput" />
         <input id="lastNameInput" />
         <input id="groupInput" />
+        <input id="wishlistInput" />
         <button id="addBtn"></button>
 
         <ul id="nameList"></ul>
@@ -37,6 +38,7 @@ function setupDOM() {
         <button id="importBtn"></button>
 
         <button id="reshuffleBtn"></button>
+        <button id="emailBtn">Email Results</button>
         <button id="copyBtn">Copy Results</button>
 
         <button id="toggleSettingsBtn"></button>

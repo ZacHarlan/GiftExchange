@@ -2,11 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('Comprehensive Gift Exchange Flow', () => {
     test.beforeEach(async ({ page }) => {
-        // Assume file:// access or local server. Adjust URL as needed.
-        // Since we don't have a specific URL, we'll try loading the file directly
-        // or assume the user runs it via `npx playwright test`.
-        // Ideally, we load `index.html`.
-        await page.goto('file:///Users/zacharlan/Documents/GiftExchange/index.html');
+        await page.goto('/');
     });
 
     test('should handle 15 people with mixed wishlists and verify assignments', async ({ page }) => {
