@@ -109,6 +109,13 @@
                     </details>
                 </div>
                 <input type="text" id="coreFamiliesInput" placeholder="Core family last names (comma separated)" autocomplete="off">
+                <label class="switch-row" for="avoidRepeatsToggle">
+                    <input type="checkbox" id="avoidRepeatsToggle" checked>
+                    <span class="switch" aria-hidden="true"></span>
+                    <span>Avoid last year’s matches</span>
+                </label>
+                <label for="lastYearInput" class="field-label">Last year’s matches <span class="field-hint">— one per line, e.g. Zac Harlan -&gt; Mindy Rice. Filled in automatically after each shuffle.</span></label>
+                <textarea id="lastYearInput" rows="3" placeholder="Giver -> Receiver"></textarea>
                 <button id="saveCoreFamiliesBtn" class="primary-btn">Save settings</button>
             </div>
         </section>
@@ -129,6 +136,7 @@
 
         <section id="resultsSection" class="results-section hidden">
             <h2>The Big Reveal</h2>
+            <p id="repeatNote" class="repeat-note hidden">✨ Nobody has the same person as last year.</p>
             <div id="resultsList" class="results-grid"></div>
             <div class="result-actions">
                 <button id="reshuffleBtn" class="secondary-btn">Reshuffle</button>
