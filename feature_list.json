@@ -88,13 +88,13 @@
   {
     "id": "bad-santa-game",
     "category": "functional",
-    "description": "Bad Santa (white-elephant) mode: draw a random turn order / numbers from the saved participant list (giftExchange.participants). Details TBD with the owner.",
-    "verification": "npx jest -t 'Bad Santa' && npm run test:e2e",
+    "description": "Bad Santa (white elephant) mode, switched from the card's mode toggle. Players come from the saved list and draw numbers (turn order); one wrapped gift per player. A turn = unwrap a new gift (type what it is) or steal any unlocked unwrapped gift. The stolen-from player goes immediately and can't take back a gift taken from them that turn. A gift locks after 3 steals. After everyone goes, #1 gets one optional final steal (a swap, no chain). Game state saved in localStorage giftExchange.badSanta (versioned) so refresh resumes. Engine BadSantaGame (pure, injectable random) + BadSantaStore + BadSantaUI in bad-santa.js.",
+    "verification": "npx jest tests/unit/bad-santa.test.js tests/architecture && npx playwright test tests/e2e/bad-santa.spec.js",
     "priority": 30,
     "depends_on": [
       "persist-participants"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "fix-html-injection",
@@ -123,7 +123,7 @@
   {
     "id": "architecture-baseline-zero",
     "category": "quality",
-    "description": "No baselined violations remain — every architecture rule passes outright.",
+    "description": "No baselined violations remain \u2014 every architecture rule passes outright.",
     "verification": "node -e \"const b=require('./tests/architecture/baseline.json'); process.exit(Object.keys(b).filter(k => !k.startsWith('_')).length ? 1 : 0)\"",
     "priority": 23,
     "depends_on": [

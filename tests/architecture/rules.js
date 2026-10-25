@@ -42,7 +42,9 @@ function classBodies(src) {
 
 const count = (text, re) => (text.match(new RegExp(re.source, 'g')) || []).length;
 
-const DOMAIN = ['Person', 'GiftExchangeService'];
+const DOMAIN = ['Person', 'GiftExchangeService', 'BadSantaGame'];
+// App source files scanned by every rule (script.js must come first).
+const SOURCES = ['script.js', 'bad-santa.js'];
 const BROWSER_GLOBALS = /\b(document|window|localStorage|sessionStorage|navigator|alert|confirm|setTimeout|setInterval)\b/;
 const STORAGE = /\b(localStorage|sessionStorage)\b/;
 const NETWORK = /\b(fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|import\s*\()/;
@@ -50,7 +52,7 @@ const NETWORK = /\b(fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|i
 const RULES = [
     {
         id: 'domain-no-browser-apis',
-        why: 'Person and GiftExchangeService hold the matching rules. They must run in plain Node so they stay unit-testable and reusable without a DOM.',
+        why: 'Person, GiftExchangeService and BadSantaGame hold the game rules. They must run in plain Node so they stay unit-testable and reusable without a DOM.',
         fix: 'Move the browser call into UIManager (or AnimationService) and pass the result into the service as an argument.',
         scan: bodies => Object.fromEntries(DOMAIN.map(c => [c, count(bodies[c] || '', BROWSER_GLOBALS)])),
     },
@@ -65,7 +67,8 @@ const RULES = [
         id: 'no-network-calls',
         why: 'Participant names and wishlists never leave the browser. The app is deliberately offline; any network call is a privacy change that needs a human decision.',
         fix: 'Remove the network call. If a feature truly needs one, get explicit approval and update this rule first.',
-        scan: (bodies, src) => ({ 'script.js': count(src.replace(/^\s*\/\/.*$/gm, ''), NETWORK) }),
+        scan: (bodies, src, files = { 'script.js': src }) =>
+            Object.fromEntries(Object.entries(files).map(([f, text]) => [f, count(text.replace(/^\s*\/\/.*$/gm, ''), NETWORK)])),
     },
     {
         id: 'animation-independent-of-domain',
@@ -120,11 +123,12 @@ const RULES = [
 ];
 
 function computeViolations() {
-    const src = read('script.js');
-    const bodies = classBodies(src);
+    const files = Object.fromEntries(SOURCES.filter(f => fs.existsSync(path.join(ROOT, f))).map(f => [f, read(f)]));
+    const src = files['script.js'];
+    const bodies = Object.assign({}, ...Object.values(files).map(classBodies));
     const result = {};
     for (const rule of RULES) {
-        const counts = rule.scan(bodies, src);
+        const counts = rule.scan(bodies, src, files);
         result[rule.id] = Object.fromEntries(Object.entries(counts).filter(([, n]) => n > 0));
     }
     return result;
@@ -147,7 +151,7 @@ function staleBaseline(current = computeViolations(), baseline = loadBaseline())
     return stale;
 }
 
-module.exports = { RULES, classBodies, computeViolations, loadBaseline, staleBaseline };
+module.exports = { RULES, SOURCES, classBodies, computeViolations, loadBaseline, staleBaseline };
 
 if (require.main === module && process.argv.includes('--stale')) {
     const stale = staleBaseline();
