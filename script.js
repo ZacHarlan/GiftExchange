@@ -37,7 +37,19 @@ class Person {
 class GiftExchangeService {
     constructor(coreFamilies) {
         this.names = [];
+        this.excludedPairs = new Set();
         this.setCoreFamilies(coreFamilies ?? []);
+    }
+
+    // Pairs ({giver, receiver} full names) that must not be drawn again, e.g. last year's.
+    setExcludedPairs(pairs) {
+        this.excludedPairs = new Set((Array.isArray(pairs) ? pairs : [])
+            .filter(p => p && p.giver && p.receiver)
+            .map(p => GiftExchangeService.pairKey(p.giver, p.receiver)));
+    }
+
+    static pairKey(giver, receiver) {
+        return `${String(giver).trim().toLowerCase()}→${String(receiver).trim().toLowerCase()}`;
     }
 
     setCoreFamilies(coreFamilies) {
@@ -168,6 +180,9 @@ class GiftExchangeService {
         }
 
         if (!allAssignments) {
+            if (this.excludedPairs.size > 0) {
+                throw new Error('Couldn’t avoid all of last year’s matches with this group. Turn off “Avoid last year’s matches” in Settings, or add more people.');
+            }
             throw new Error('Could not find valid assignments after 10 attempts. Try adding more people or checking constraints.');
         }
 
@@ -208,6 +223,10 @@ class GiftExchangeService {
                     break;
                 }
                 if (giver.familyGroup.toLowerCase() === receiver.familyGroup.toLowerCase()) {
+                    isValid = false;
+                    break;
+                }
+                if (this.excludedPairs.has(GiftExchangeService.pairKey(giver.getFullName(), receiver.getFullName()))) {
                     isValid = false;
                     break;
                 }
@@ -261,6 +280,54 @@ class ParticipantStore {
             if (this.storage) this.storage.removeItem(ParticipantStore.KEY);
         } catch (_) { }
     }
+}
+
+// Remembers who gave to whom each year, so next year can avoid repeats.
+class MatchHistory {
+    static get KEY() {
+        return 'giftExchange.history';
+    }
+
+    constructor(storage) {
+        this.storage = storage;
+    }
+
+    read() {
+        try {
+            const raw = this.storage && this.storage.getItem(MatchHistory.KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            return parsed && parsed.years && typeof parsed.years === 'object' ? parsed : { version: 1, years: {} };
+        } catch (_) {
+            return { version: 1, years: {} };
+        }
+    }
+
+    getYear(year) {
+        const pairs = this.read().years[String(year)];
+        return Array.isArray(pairs) ? pairs : [];
+    }
+
+    saveYear(year, pairs) {
+        try {
+            if (!this.storage) return;
+            const data = this.read();
+            data.years[String(year)] = pairs;
+            this.storage.setItem(MatchHistory.KEY, JSON.stringify(data));
+        } catch (_) { }
+    }
+}
+
+// "Ann A -> Ben B" (also →, =>, ":" or "gives to"), one per line. A trailing "(…)" note is ignored.
+function parseMatchLines(text) {
+    const pairs = [];
+    for (const raw of String(text || '').split(/\r?\n/)) {
+        const line = raw.replace(/\(.*\)\s*$/, '').trim();
+        const parts = line.split(/\s*(?:->|→|=>|:|\bgives to\b)\s*/i);
+        if (parts.length === 2 && parts[0] && parts[1]) {
+            pairs.push({ giver: parts[0].trim(), receiver: parts[1].trim() });
+        }
+    }
+    return pairs;
 }
 
 class AnimationService {
@@ -511,16 +578,18 @@ function el(tag, className, text) {
 }
 
 class UIManager {
-    constructor(exchangeService, animationService, participantStore) {
+    constructor(exchangeService, animationService, participantStore, matchHistory) {
         this.exchangeService = exchangeService;
         this.animationService = animationService;
         this.participantStore = participantStore || new ParticipantStore(UIManager.browserStorage());
+        this.matchHistory = matchHistory || new MatchHistory(UIManager.browserStorage());
         this.confirm = (message) => window.confirm(message);
 
         this.STORAGE_KEY_CORE_FAMILIES = 'giftExchange.coreFamilies';
         this.STORAGE_KEY_THEME = 'giftExchange.theme';
         this.STORAGE_KEY_BUDGET = 'giftExchange.budget';
         this.STORAGE_KEY_DATE = 'giftExchange.date';
+        this.STORAGE_KEY_AVOID_REPEATS = 'giftExchange.avoidRepeats';
         this.now = () => new Date();
 
         // Elements
@@ -551,6 +620,9 @@ class UIManager {
         this.budgetInput = document.getElementById('budgetInput');
         this.exchangeDateInput = document.getElementById('exchangeDateInput');
         this.eventBanner = document.getElementById('eventBanner');
+        this.avoidRepeatsToggle = document.getElementById('avoidRepeatsToggle');
+        this.lastYearInput = document.getElementById('lastYearInput');
+        this.repeatNote = document.getElementById('repeatNote');
 
         // List chrome (optional elements)
         this.nameCount = document.getElementById('nameCount');
@@ -722,6 +794,23 @@ class UIManager {
             if (this.exchangeDateInput) this.exchangeDateInput.value = localStorage.getItem(this.STORAGE_KEY_DATE) || '';
         } catch (_) { }
         this.renderEventBanner();
+
+        // Last year's matches
+        if (this.avoidRepeatsToggle) {
+            let saved = null;
+            try { saved = localStorage.getItem(this.STORAGE_KEY_AVOID_REPEATS); } catch (_) { }
+            this.avoidRepeatsToggle.checked = saved !== 'false';
+        }
+        if (this.lastYearInput) {
+            this.lastYearInput.value = this.matchHistory.getYear(this.exchangeYear() - 1)
+                .map(p => `${p.giver} -> ${p.receiver}`).join('\n');
+        }
+    }
+
+    // The year this exchange belongs to: the exchange date's year, else this year.
+    exchangeYear() {
+        const date = EventDetails.parseDate(this.exchangeDateInput ? this.exchangeDateInput.value : '');
+        return (date || this.now()).getFullYear();
     }
 
     eventDetails() {
@@ -759,6 +848,16 @@ class UIManager {
                 } else {
                     localStorage.removeItem(this.STORAGE_KEY_CORE_FAMILIES);
                 }
+            } catch (_) { }
+        }
+
+        // Save last year's matches + the avoid-repeats choice
+        if (this.lastYearInput) {
+            this.matchHistory.saveYear(this.exchangeYear() - 1, parseMatchLines(this.lastYearInput.value));
+        }
+        if (this.avoidRepeatsToggle) {
+            try {
+                localStorage.setItem(this.STORAGE_KEY_AVOID_REPEATS, this.avoidRepeatsToggle.checked ? 'true' : 'false');
             } catch (_) { }
         }
 
@@ -825,6 +924,11 @@ class UIManager {
 
     handleShuffle() {
         try {
+            const avoiding = !this.avoidRepeatsToggle || this.avoidRepeatsToggle.checked
+                ? this.matchHistory.getYear(this.exchangeYear() - 1)
+                : [];
+            this.exchangeService.setExcludedPairs(avoiding);
+
             // Pre-calculate to catch errors early
             const assignments = this.exchangeService.shuffleAndAssign();
 
@@ -833,6 +937,11 @@ class UIManager {
             // If successful, play animation then show results
             this.animationService.play(theme, () => {
                 this.displayResults(assignments);
+                this.matchHistory.saveYear(this.exchangeYear(), assignments.map(a => ({
+                    giver: a.giver.getFullName(),
+                    receiver: a.receiver.getFullName()
+                })));
+                if (this.repeatNote) this.repeatNote.classList.toggle('hidden', avoiding.length === 0);
                 this.scrollToResults();
             });
         } catch (err) {
@@ -1047,6 +1156,8 @@ if (typeof module !== 'undefined' && module.exports) {
         Person,
         GiftExchangeService,
         EventDetails,
+        MatchHistory,
+        parseMatchLines,
         parseBulkList,
         ParticipantStore,
         UIManager,
