@@ -18,7 +18,7 @@ If `bash init.sh` fails, fixing it **is** the task.
 | Thing | Value |
 |---|---|
 | App | Static, single-page, vanilla JS — `index.html` + `script.js` + `style.css`. No build step, no backend, no database. |
-| Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`. Names/wishlists never leave the browser. |
+| Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`, `giftExchange.badSanta` (saved Bad Santa game). Names/wishlists never leave the browser. |
 | Art | Blender 5.2 (Cycles) scene scripts in `art/` → `art/post.py` (Pillow) → `assets/*.webp`. Rebuild: `bash art/render.sh`. |
 | Runtime (dev) | Node ≥ 18 (developed on 26), npm 11 |
 | Dev server | `scripts/serve.js` (zero-dependency) → http://localhost:8085, `GET /health` → `{"status":"ok"}` |
@@ -65,6 +65,7 @@ Wiring happens once at the bottom of `script.js` (`DOMContentLoaded`) — servic
 |---|---|
 | `index.html` | Markup; every element the JS touches has an `id`. |
 | `script.js` | All app logic: `Person`, `GiftExchangeService`, `AnimationService`, `UIManager`. |
+| `bad-santa.js` | Bad Santa (white elephant) mode: `BadSantaGame` (pure engine), `BadSantaStore` (`giftExchange.badSanta`), `BadSantaUI`. Loaded after `script.js`. |
 | `style.css` | All styling. Palettes are CSS custom properties per `body[data-theme="christmas|hanukkah"]`. |
 | `art/` | Blender scene scripts (`art/common.py` helpers, one file per scene), `art/post.py`, `art/render.sh`. |
 | `assets/` | Rendered WebP art and sprite sheets (generated — edit `art/`, then re-render). |
