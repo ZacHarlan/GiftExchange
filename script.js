@@ -82,6 +82,35 @@ class GiftExchangeService {
         return [...this.names];
     }
 
+    clearPeople() {
+        this.names = [];
+    }
+
+    // Plain data for saving / sharing with other features (e.g. Bad Santa).
+    toRecords() {
+        return this.names.map(p => ({
+            firstName: p.firstName,
+            lastName: p.lastName,
+            familyGroup: p.familyGroup,
+            wishlist: p.wishlist
+        }));
+    }
+
+    // Adds valid, non-duplicate records; returns how many were added.
+    loadRecords(records) {
+        let added = 0;
+        for (const r of Array.isArray(records) ? records : []) {
+            if (!r || typeof r.firstName !== 'string' || typeof r.lastName !== 'string') continue;
+            if (!r.firstName.trim() || !r.lastName.trim()) continue;
+            if (this.isNameTaken(r.firstName, r.lastName)) continue;
+            const group = typeof r.familyGroup === 'string' ? r.familyGroup : '';
+            const wishlist = typeof r.wishlist === 'string' ? r.wishlist : '';
+            this.addPerson(r.firstName, r.lastName, group, wishlist);
+            added++;
+        }
+        return added;
+    }
+
     isNameTaken(first, last) {
         return this.names.some(entry =>
             entry.firstName.toLowerCase() === first.trim().toLowerCase() &&
@@ -185,64 +214,95 @@ class GiftExchangeService {
     }
 }
 
+// --- Persistence ---
+
+// Saves the participant list so it survives reloads. Storage is injected
+// (window.localStorage in the app, a fake in tests); every call is failure-safe.
+class ParticipantStore {
+    static get KEY() {
+        return 'giftExchange.participants';
+    }
+
+    constructor(storage) {
+        this.storage = storage;
+    }
+
+    load() {
+        try {
+            const raw = this.storage && this.storage.getItem(ParticipantStore.KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return parsed && Array.isArray(parsed.participants) ? parsed.participants : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    save(records) {
+        try {
+            if (this.storage) {
+                this.storage.setItem(ParticipantStore.KEY, JSON.stringify({ version: 1, participants: records }));
+            }
+        } catch (_) { }
+    }
+
+    clear() {
+        try {
+            if (this.storage) this.storage.removeItem(ParticipantStore.KEY);
+        } catch (_) { }
+    }
+}
+
 class AnimationService {
     constructor() {
         this.overlay = document.getElementById('loadingOverlay');
         this.loadingText = document.getElementById('loadingText');
         this.giftIcon = document.getElementById('giftIcon');
+        this.giftOpenIcon = document.getElementById('giftOpenIcon');
         this.hanukkahContainer = document.getElementById('hanukkahContainer');
         this.hanukkahIcon = document.getElementById('hanukkahIcon');
         this.menorahIcon = document.getElementById('menorahIcon');
         this.menorahFlames = document.querySelector('.menorah-flames');
+        this.latkeIcon = document.getElementById('latkeIcon');
+        this.geltIcon = document.getElementById('geltIcon');
+    }
+
+    static get MESSAGES() {
+        return {
+            christmas: [
+                'Checking the Naughty List...',
+                'Checking it twice...',
+                'Wrapping gifts...',
+                'Here they come!'
+            ],
+            hanukkah: [
+                'Spinning the Dreidel...',
+                'Lighting the Menorah...',
+                'Frying Latkes...',
+                'Counting Gelt...'
+            ]
+        };
     }
 
     play(theme, callback) {
+        const isHanukkah = theme === 'hanukkah';
         this.overlay.classList.remove('hidden');
-        this.overlay.style.display = 'flex'; // Force flex to ensure visibility and centering
+        this.overlay.style.display = 'flex';
 
-        // Reset animations
-        this.giftIcon.classList.remove('pop-out');
-        if (this.hanukkahContainer) {
-            this.hanukkahContainer.classList.remove('pop-out');
-            if (this.hanukkahIcon) {
-                this.hanukkahIcon.classList.remove('spin');
-                this.hanukkahIcon.classList.remove('hidden');
-            }
-            if (this.menorahIcon) this.menorahIcon.classList.add('hidden'); // Start hidden
-            if (this.menorahFlames) this.menorahFlames.classList.add('hidden'); // Flames hidden
-        }
+        this.resetChristmasState();
+        this.resetHanukkahState();
+        if (this.hanukkahContainer) this.hanukkahContainer.classList.remove('pop-out');
 
-        // Toggle Icons based on theme
-        if (theme === 'hanukkah') {
+        if (isHanukkah) {
             this.giftIcon.classList.add('hidden');
-            if (this.hanukkahContainer) {
-                this.hanukkahContainer.classList.remove('hidden');
-                // Phase 1: Only Dreidel spinning
-                if (this.hanukkahIcon) this.hanukkahIcon.classList.add('spin');
-            }
+            if (this.hanukkahContainer) this.hanukkahContainer.classList.remove('hidden');
+            if (this.hanukkahIcon) this.hanukkahIcon.classList.add('spin');
         } else {
             if (this.hanukkahContainer) this.hanukkahContainer.classList.add('hidden');
             this.giftIcon.classList.remove('hidden');
         }
 
-        // Set Messages
-        let messages = [];
-        if (theme === 'hanukkah') {
-            messages = [
-                "Spinning the Dreidel...",
-                "Lighting the Menorah...",
-                "Frying Latkes...",
-                "Counting Gelt..."
-            ];
-        } else {
-            messages = [
-                "Checking Naughty List...",
-                "Checking Nice List...",
-                "Wrapping Gifts...",
-                "Adding Bows..."
-            ];
-        }
-
+        const messages = AnimationService.MESSAGES[isHanukkah ? 'hanukkah' : 'christmas'];
         let step = 0;
         this.loadingText.textContent = messages[0];
 
@@ -250,101 +310,102 @@ class AnimationService {
             step++;
             if (step < messages.length) {
                 this.loadingText.textContent = messages[step];
-
-                // --- Hanukkah Logic Updates based on Step ---
-                if (theme === 'hanukkah') {
-                    // Step 1: Lighting Menorah
-                    if (step === 1) {
-                        if (this.hanukkahIcon) {
-                            this.hanukkahIcon.classList.add('hidden');
-                            this.hanukkahIcon.classList.remove('spin');
-                        }
-                        if (this.menorahIcon) this.menorahIcon.classList.remove('hidden');
-                        if (this.menorahFlames) this.menorahFlames.classList.remove('hidden');
-                    }
-                    // Step 2: Frying Latkes
-                    if (step === 2) {
-                        if (this.menorahIcon) this.menorahIcon.classList.add('hidden');
-                        const latkeIcon = document.getElementById('latkeIcon');
-                        if (latkeIcon) {
-                            latkeIcon.style.opacity = '1';
-                            latkeIcon.classList.add('sizzle'); // Add sizzle class to svg or group
-                        }
-                    }
-                    // Step 3: Counting Gelt
-                    if (step === 3) {
-                        const latkeIcon = document.getElementById('latkeIcon');
-                        if (latkeIcon) {
-                            latkeIcon.style.opacity = '0';
-                            latkeIcon.classList.remove('sizzle');
-                        }
-                        const geltIcon = document.getElementById('geltIcon');
-                        if (geltIcon) geltIcon.style.opacity = '1';
-                    }
+                if (isHanukkah) {
+                    this.showHanukkahStep(step);
+                } else if (step === messages.length - 1) {
+                    this.openGift();
                 }
-
-            } else {
-                clearInterval(interval);
-
-                // Final Animation
-                if (theme === 'hanukkah') {
-                    if (this.hanukkahContainer) {
-                        // Reset last icon
-                        const geltIcon = document.getElementById('geltIcon');
-                        if (geltIcon) geltIcon.style.opacity = '0'; // Hide Gelt
-
-                        // Bring back Dreidel for final pop? Or just pop container?
-                        // Let's show the Gelt popping out actually, or bring back all?
-                        // Actually, let's make the Gelt stick for the pop-out since it's the "result"
-                        if (geltIcon) {
-                            geltIcon.style.opacity = '1';
-                        }
-
-                        this.hanukkahContainer.classList.add('pop-out');
-                    }
-                } else {
-                    this.giftIcon.classList.add('pop-out');
-                }
-
-                setTimeout(() => {
-                    this.overlay.classList.add('hidden');
-                    this.overlay.style.display = ''; // Clear inline style
-
-                    // Reset Hanukkah state for next time
-                    if (theme === 'hanukkah') {
-                        this.resetHanukkahState();
-                    }
-
-                    if (callback) callback();
-                }, 500);
+                return;
             }
+
+            clearInterval(interval);
+            if (isHanukkah) {
+                if (this.hanukkahContainer) this.hanukkahContainer.classList.add('pop-out');
+            } else {
+                this.giftIcon.classList.add('pop-out');
+                if (this.giftOpenIcon) this.giftOpenIcon.classList.add('pop-out');
+            }
+
+            setTimeout(() => {
+                this.overlay.classList.add('hidden');
+                this.overlay.style.display = '';
+                if (isHanukkah) this.resetHanukkahState();
+                if (callback) callback();
+            }, 500);
         }, 800);
     }
 
-    resetHanukkahState() {
-        const latkeIcon = document.getElementById('latkeIcon');
-        const geltIcon = document.getElementById('geltIcon');
+    openGift() {
+        if (!this.giftOpenIcon) return;
+        this.giftIcon.classList.add('hidden');
+        this.giftOpenIcon.classList.remove('hidden');
+    }
 
-        if (latkeIcon) {
-            latkeIcon.style.opacity = '0';
-            latkeIcon.classList.remove('sizzle');
+    showHanukkahStep(step) {
+        if (step === 1) {
+            if (this.hanukkahIcon) {
+                this.hanukkahIcon.classList.add('hidden');
+                this.hanukkahIcon.classList.remove('spin');
+            }
+            if (this.menorahIcon) this.menorahIcon.classList.remove('hidden');
+            if (this.menorahFlames) this.menorahFlames.classList.remove('hidden');
         }
-        if (geltIcon) {
-            geltIcon.style.opacity = '0';
+        if (step === 2) {
+            if (this.menorahIcon) this.menorahIcon.classList.add('hidden');
+            if (this.latkeIcon) {
+                this.latkeIcon.style.opacity = '1';
+                this.latkeIcon.classList.add('sizzle');
+            }
         }
+        if (step === 3) {
+            if (this.latkeIcon) {
+                this.latkeIcon.style.opacity = '0';
+                this.latkeIcon.classList.remove('sizzle');
+            }
+            if (this.geltIcon) this.geltIcon.style.opacity = '1';
+        }
+    }
+
+    resetChristmasState() {
+        this.giftIcon.classList.remove('pop-out');
+        if (this.giftOpenIcon) {
+            this.giftOpenIcon.classList.remove('pop-out');
+            this.giftOpenIcon.classList.add('hidden');
+        }
+    }
+
+    resetHanukkahState() {
+        if (this.latkeIcon) {
+            this.latkeIcon.style.opacity = '0';
+            this.latkeIcon.classList.remove('sizzle');
+        }
+        if (this.geltIcon) this.geltIcon.style.opacity = '0';
         if (this.menorahIcon) this.menorahIcon.classList.add('hidden');
+        if (this.menorahFlames) this.menorahFlames.classList.add('hidden');
         if (this.hanukkahIcon) {
-            this.hanukkahIcon.classList.remove('hidden'); // Reset to start
+            this.hanukkahIcon.classList.remove('spin');
+            this.hanukkahIcon.classList.remove('hidden');
         }
     }
 }
 
+// Create an element with a class and (text-only) content.
+function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+}
+
 class UIManager {
-    constructor(exchangeService, animationService) {
+    constructor(exchangeService, animationService, participantStore) {
         this.exchangeService = exchangeService;
         this.animationService = animationService;
+        this.participantStore = participantStore || new ParticipantStore(UIManager.browserStorage());
+        this.confirm = (message) => window.confirm(message);
 
         this.STORAGE_KEY_CORE_FAMILIES = 'giftExchange.coreFamilies';
+        this.STORAGE_KEY_THEME = 'giftExchange.theme';
 
         // Elements
         this.firstNameInput = document.getElementById('firstNameInput');
@@ -370,6 +431,12 @@ class UIManager {
         this.settingsSection = document.getElementById('settingsSection');
         this.coreFamiliesInput = document.getElementById('coreFamiliesInput');
         this.saveCoreFamiliesBtn = document.getElementById('saveCoreFamiliesBtn');
+        this.themeSelect = document.getElementById('themeSelect');
+
+        // List chrome (optional elements)
+        this.nameCount = document.getElementById('nameCount');
+        this.emptyState = document.getElementById('emptyState');
+        this.clearListBtn = document.getElementById('clearListBtn');
 
         this.initSettings();
 
@@ -379,6 +446,35 @@ class UIManager {
         this.copyBtn = document.getElementById('copyBtn');
 
         this.initEventListeners();
+        this.restoreParticipants();
+        this.updateButtons();
+    }
+
+    static browserStorage() {
+        try {
+            return window.localStorage;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    restoreParticipants() {
+        this.exchangeService.loadRecords(this.participantStore.load());
+        this.renderList();
+    }
+
+    saveParticipants() {
+        this.participantStore.save(this.exchangeService.toRecords());
+    }
+
+    handleClearList() {
+        const count = this.exchangeService.getPeople().length;
+        if (count === 0) return;
+        if (!this.confirm(`Remove all ${count} people from the list?`)) return;
+        this.exchangeService.clearPeople();
+        this.participantStore.clear();
+        this.resetView();
+        this.renderList();
         this.updateButtons();
     }
 
@@ -447,8 +543,29 @@ class UIManager {
             this.saveCoreFamiliesBtn.addEventListener('click', () => this.handleSaveSettings());
         }
 
-        // Global remove function for inline onclick
-        window.removeName = (index) => this.handleRemoveName(index);
+        if (this.clearListBtn) {
+            this.clearListBtn.addEventListener('click', () => this.handleClearList());
+        }
+
+        // Delete buttons (event delegation — no globals, no inline handlers)
+        this.nameList.addEventListener('click', (e) => {
+            const btn = e.target.closest('.delete-btn');
+            if (btn && !btn.disabled) this.handleRemoveName(Number(btn.dataset.index));
+        });
+
+        // Theme applies as soon as it's picked
+        if (this.themeSelect) {
+            this.themeSelect.addEventListener('change', () => {
+                this.applyTheme(this.themeSelect.value);
+                try {
+                    localStorage.setItem(this.STORAGE_KEY_THEME, this.themeSelect.value);
+                } catch (_) { }
+            });
+        }
+    }
+
+    applyTheme(theme) {
+        document.body.dataset.theme = theme === 'hanukkah' ? 'hanukkah' : 'christmas';
     }
 
     initSettings() {
@@ -470,14 +587,14 @@ class UIManager {
         }
 
         // Load Theme
-        const themeSelect = document.getElementById('themeSelect');
-        if (themeSelect) {
+        if (this.themeSelect) {
             try {
-                const savedTheme = localStorage.getItem('giftExchange.theme');
+                const savedTheme = localStorage.getItem(this.STORAGE_KEY_THEME);
                 if (savedTheme) {
-                    themeSelect.value = savedTheme;
+                    this.themeSelect.value = savedTheme;
                 }
             } catch (_) { }
+            this.applyTheme(this.themeSelect.value);
         }
     }
 
@@ -500,10 +617,10 @@ class UIManager {
         }
 
         // Save Theme
-        const themeSelect = document.getElementById('themeSelect');
-        if (themeSelect) {
+        if (this.themeSelect) {
+            this.applyTheme(this.themeSelect.value);
             try {
-                localStorage.setItem('giftExchange.theme', themeSelect.value);
+                localStorage.setItem(this.STORAGE_KEY_THEME, this.themeSelect.value);
             } catch (_) { }
         }
 
@@ -526,6 +643,7 @@ class UIManager {
 
         try {
             this.exchangeService.addPerson(firstName, lastName, group, wishlist);
+            this.saveParticipants();
             this.firstNameInput.value = '';
             this.lastNameInput.value = '';
             this.groupInput.value = '';
@@ -541,6 +659,7 @@ class UIManager {
 
     handleRemoveName(index) {
         this.exchangeService.removePerson(index);
+        this.saveParticipants();
         this.renderList();
         this.updateButtons();
         if (!this.resultsSection.classList.contains('hidden')) {
@@ -553,9 +672,7 @@ class UIManager {
             // Pre-calculate to catch errors early
             const assignments = this.exchangeService.shuffleAndAssign();
 
-            // Get selected theme
-            const themeSelect = document.getElementById('themeSelect');
-            const theme = themeSelect ? themeSelect.value : 'christmas';
+            const theme = this.themeSelect ? this.themeSelect.value : 'christmas';
 
             // If successful, play animation then show results
             this.animationService.play(theme, () => {
@@ -606,6 +723,7 @@ class UIManager {
         });
 
         if (addedCount > 0) {
+            this.saveParticipants();
             this.bulkInput.value = '';
             this.bulkSection.classList.add('hidden');
             this.renderList();
@@ -666,47 +784,75 @@ class UIManager {
     }
 
     renderList() {
-        this.nameList.innerHTML = '';
         const people = this.exchangeService.getPeople();
+        this.nameList.replaceChildren(...people.map((person, index) => this.buildNameItem(person, index)));
 
-        people.forEach((person, index) => {
-            const li = document.createElement('li');
-            li.className = 'name-item';
+        if (this.nameCount) this.nameCount.textContent = String(people.length);
+        if (this.emptyState) this.emptyState.classList.toggle('hidden', people.length > 0);
+        if (this.clearListBtn) this.clearListBtn.classList.toggle('hidden', people.length === 0);
+    }
 
-            const groupDisplay = ` <small style="color: var(--gold); margin-left: 0.5rem;">${person.getDisplayGroup()}</small>`;
+    buildNameItem(person, index) {
+        const li = el('li', 'name-item');
+        li.style.setProperty('--tag', UIManager.tagColor(person.familyGroup));
 
-            li.innerHTML = `
-                <span>${person.getFullName()}${groupDisplay}${person.wishlist ? ' <span title="' + person.wishlist + '">🎁</span>' : ''}</span>
-                <button class="delete-btn" onclick="removeName(${index})" aria-label="Remove ${person.getFullName()}">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
-            `;
-            this.nameList.appendChild(li);
-        });
+        const main = el('span', 'name-main');
+        main.append(el('span', 'person-name', person.getFullName()), el('small', 'person-group', person.getDisplayGroup()));
+        if (person.wishlist) {
+            const wish = el('span', 'wish-icon', '🎁');
+            wish.title = person.wishlist;
+            main.append(wish);
+        }
+
+        const del = el('button', 'delete-btn');
+        del.type = 'button';
+        del.dataset.index = String(index);
+        del.setAttribute('aria-label', `Remove ${person.getFullName()}`);
+        del.append(UIManager.closeIcon());
+
+        li.append(main, del);
+        return li;
+    }
+
+    // Same family group -> same tag colour, so households are easy to spot.
+    static tagColor(group) {
+        let hash = 0;
+        for (const ch of String(group).toLowerCase()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+        return `hsl(${hash % 360} 75% 58%)`;
+    }
+
+    static closeIcon() {
+        const ns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(ns, 'svg');
+        svg.setAttribute('width', '20');
+        svg.setAttribute('height', '20');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        const path = document.createElementNS(ns, 'path');
+        path.setAttribute('d', 'M18 6L6 18M6 6L18 18');
+        path.setAttribute('stroke', 'currentColor');
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke-linecap', 'round');
+        svg.append(path);
+        return svg;
     }
 
     displayResults(assignments) {
-        this.resultsList.innerHTML = '';
-        assignments.forEach(pair => {
-            const div = document.createElement('div');
-            div.className = 'result-card';
-
-            const wishlistHtml = pair.receiver.wishlist
-                ? `<div class="wishlist-note" style="width: 100%; margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"><span style="color: var(--gold);">🎁 Wishlist:</span> ${pair.receiver.wishlist}</div>`
-                : '';
-
-            div.style.flexWrap = 'wrap';
-
-            div.innerHTML = `
-                <span class="giver">${pair.giver.getFullName()}</span>
-                <span class="arrow">→</span>
-                <span class="receiver">${pair.receiver.getFullName()}</span>
-                ${wishlistHtml}
-            `;
-            this.resultsList.appendChild(div);
-        });
+        this.resultsList.replaceChildren(...assignments.map((pair, i) => {
+            const card = el('div', 'result-card');
+            card.style.setProperty('--i', String(i));
+            card.append(
+                el('span', 'giver', pair.giver.getFullName()),
+                el('span', 'arrow', '→'),
+                el('span', 'receiver', pair.receiver.getFullName())
+            );
+            if (pair.receiver.wishlist) {
+                const note = el('div', 'wishlist-note');
+                note.append(el('span', 'label', '🎁 Wishlist:'), document.createTextNode(` ${pair.receiver.wishlist}`));
+                card.append(note);
+            }
+            return card;
+        }));
 
         this.resultsSection.classList.remove('hidden');
         this.shuffleBtn.classList.add('hidden');
@@ -759,6 +905,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         Person,
         GiftExchangeService,
+        ParticipantStore,
         UIManager,
         AnimationService
     };

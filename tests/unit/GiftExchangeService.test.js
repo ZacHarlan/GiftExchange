@@ -42,8 +42,8 @@ describe('GiftExchangeService', () => {
         expect(assignments).toHaveLength(2);
 
         // Alice -> Bob, Bob -> Alice
-        const aliceAssignment = assignments.find(a => a.giver === 'Alice A');
-        expect(aliceAssignment.receiver).toBe('Bob B');
+        const aliceAssignment = assignments.find(a => a.giver.getFullName() === 'Alice A');
+        expect(aliceAssignment.receiver.getFullName()).toBe('Bob B');
     });
 
     test('should respect restricted matching (Core vs Other)', () => {
@@ -58,18 +58,18 @@ describe('GiftExchangeService', () => {
 
         const assignments = service.shuffleAndAssign();
 
-        const mindy = assignments.find(a => a.giver === 'Mindy Rice');
-        const zac = assignments.find(a => a.giver === 'Zac Harlan');
-        const john = assignments.find(a => a.giver === 'John Doe');
-        const jane = assignments.find(a => a.giver === 'Jane Doe');
+        const mindy = assignments.find(a => a.giver.getFullName() === 'Mindy Rice');
+        const zac = assignments.find(a => a.giver.getFullName() === 'Zac Harlan');
+        const john = assignments.find(a => a.giver.getFullName() === 'John Doe');
+        const jane = assignments.find(a => a.giver.getFullName() === 'Jane Doe');
 
         // Core should match Core
-        expect(['Zac Harlan', 'Mindy Rice']).toContain(mindy.receiver);
-        expect(['Zac Harlan', 'Mindy Rice']).toContain(zac.receiver);
+        expect(['Zac Harlan', 'Mindy Rice']).toContain(mindy.receiver.getFullName());
+        expect(['Zac Harlan', 'Mindy Rice']).toContain(zac.receiver.getFullName());
 
         // Other should match Other
-        expect(['John Doe', 'Jane Doe']).toContain(john.receiver);
-        expect(['John Doe', 'Jane Doe']).toContain(jane.receiver);
+        expect(['John Doe', 'Jane Doe']).toContain(john.receiver.getFullName());
+        expect(['John Doe', 'Jane Doe']).toContain(jane.receiver.getFullName());
     });
 
     test('should throw error if a pool has only 1 person', () => {
@@ -108,8 +108,8 @@ describe('GiftExchangeService', () => {
 
         const assignments = service.shuffleAndAssign();
 
-        const john = assignments.find(a => a.giver === 'John Doe');
-        expect(['John Doe', 'Jane Doe']).toContain(john.receiver);
+        const john = assignments.find(a => a.giver.getFullName() === 'John Doe');
+        expect(['John Doe', 'Jane Doe']).toContain(john.receiver.getFullName());
     });
 
     test('should normalize/de-dupe core families and display them', () => {

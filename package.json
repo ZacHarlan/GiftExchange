@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "main": "script.js",
   "scripts": {
+    "start": "node scripts/serve.js",
     "test": "jest",
+    "test:arch": "jest tests/architecture",
     "test:e2e": "playwright test",
+    "test:all": "jest && playwright test",
+    "test:coverage": "jest --coverage",
     "coverage:script": "jest --coverage --coverageProvider=v8 --collectCoverageFrom=script.js --coverageReporters=text-summary"
   },
   "keywords": [],
