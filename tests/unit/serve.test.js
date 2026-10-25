@@ -51,6 +51,19 @@ describe('dev server (scripts/serve.js)', () => {
         expect((await get(port, '/style.css')).type).toMatch(/text\/css/);
     });
 
+    test('serves rendered art from assets/ as image/webp', async () => {
+        const res = await get(port, '/assets/gift.webp');
+        expect(res.status).toBe(200);
+        expect(res.type).toBe('image/webp');
+    });
+
+    test.each(['/assets/../package.json', '/assets/nope.png', '/assets/sub/x.webp', '/art/post.py'])(
+        'refuses non-asset path %s',
+        async urlPath => {
+            expect((await get(port, urlPath)).status).toBe(404);
+        }
+    );
+
     test.each(['/package.json', '/scripts/serve.js', '/../etc/passwd', '/%2e%2e/package.json', '/.git/config', '/node_modules/jest/package.json'])(
         'refuses non-app path %s',
         async urlPath => {

@@ -14,16 +14,18 @@ const MIME = {
     '.js': 'text/javascript; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
     '.svg': 'image/svg+xml',
+    '.webp': 'image/webp',
     '.png': 'image/png',
     '.ico': 'image/x-icon',
 };
-// Only app assets at the repo root are servable — never tests, configs, or node_modules.
+// Only app files are servable — never tests, configs, art sources, or node_modules.
 const SERVABLE = new Set(['index.html', 'script.js', 'style.css']);
+const ASSET = /^assets\/[a-z0-9-]+\.webp$/;
 
 function resolveRequest(urlPath) {
     const clean = decodeURIComponent(urlPath.split('?')[0]);
     const name = clean === '/' ? 'index.html' : clean.replace(/^\/+/, '');
-    if (!SERVABLE.has(name)) return null;
+    if (!SERVABLE.has(name) && !ASSET.test(name)) return null;
     return path.join(ROOT, name);
 }
 
