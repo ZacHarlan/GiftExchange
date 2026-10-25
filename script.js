@@ -399,6 +399,62 @@ class AnimationService {
     }
 }
 
+// --- Event details (budget, date, countdown) ---
+
+// Pure formatting helpers; "today" is always passed in so tests can pick the day.
+class EventDetails {
+    static formatBudget(raw) {
+        const text = String(raw || '').trim();
+        if (!text) return '';
+        return /^\d+(\.\d+)?$/.test(text) ? `$${text}` : text;
+    }
+
+    static parseDate(iso) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+        if (!m) return null;
+        const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    static daysUntil(iso, today) {
+        const target = EventDetails.parseDate(iso);
+        if (!target) return null;
+        const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        return Math.round((target - start) / 86400000);
+    }
+
+    static formatDate(iso) {
+        const d = EventDetails.parseDate(iso);
+        return d ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+    }
+
+    static describe({ budget, date } = {}, today) {
+        const budgetText = EventDetails.formatBudget(budget);
+        const days = EventDetails.daysUntil(date, today);
+        let countdown = '';
+        let snow = 'normal';
+        if (days !== null && days >= 0) {
+            countdown = days === 0 ? "Today's the day! 🎉" : days === 1 ? 'Tomorrow!' : `${days} days to go`;
+            snow = days <= 3 ? 'blizzard' : days <= 14 ? 'heavy' : 'normal';
+        }
+        return {
+            budget: budgetText ? `${budgetText} limit` : '',
+            date: EventDetails.formatDate(date),
+            countdown,
+            snow,
+        };
+    }
+
+    static summaryLine({ budget, date } = {}) {
+        const parts = [];
+        const b = EventDetails.formatBudget(budget);
+        const d = EventDetails.formatDate(date);
+        if (b) parts.push(`Budget: ${b}`);
+        if (d) parts.push(`Exchange: ${d}`);
+        return parts.join(' · ');
+    }
+}
+
 // --- Bulk import parsing ---
 
 // Turns pasted text into people. People are separated by commas or new lines.
@@ -463,6 +519,9 @@ class UIManager {
 
         this.STORAGE_KEY_CORE_FAMILIES = 'giftExchange.coreFamilies';
         this.STORAGE_KEY_THEME = 'giftExchange.theme';
+        this.STORAGE_KEY_BUDGET = 'giftExchange.budget';
+        this.STORAGE_KEY_DATE = 'giftExchange.date';
+        this.now = () => new Date();
 
         // Elements
         this.firstNameInput = document.getElementById('firstNameInput');
@@ -489,6 +548,9 @@ class UIManager {
         this.coreFamiliesInput = document.getElementById('coreFamiliesInput');
         this.saveCoreFamiliesBtn = document.getElementById('saveCoreFamiliesBtn');
         this.themeSelect = document.getElementById('themeSelect');
+        this.budgetInput = document.getElementById('budgetInput');
+        this.exchangeDateInput = document.getElementById('exchangeDateInput');
+        this.eventBanner = document.getElementById('eventBanner');
 
         // List chrome (optional elements)
         this.nameCount = document.getElementById('nameCount');
@@ -653,6 +715,33 @@ class UIManager {
             } catch (_) { }
             this.applyTheme(this.themeSelect.value);
         }
+
+        // Load budget + exchange date
+        try {
+            if (this.budgetInput) this.budgetInput.value = localStorage.getItem(this.STORAGE_KEY_BUDGET) || '';
+            if (this.exchangeDateInput) this.exchangeDateInput.value = localStorage.getItem(this.STORAGE_KEY_DATE) || '';
+        } catch (_) { }
+        this.renderEventBanner();
+    }
+
+    eventDetails() {
+        return {
+            budget: this.budgetInput ? this.budgetInput.value : '',
+            date: this.exchangeDateInput ? this.exchangeDateInput.value : '',
+        };
+    }
+
+    renderEventBanner() {
+        const info = EventDetails.describe(this.eventDetails(), this.now());
+        document.body.dataset.snow = info.snow;
+        if (!this.eventBanner) return;
+        const pieces = [['🎁', info.budget], ['📅', info.date], ['⏳', info.countdown]].filter(([, text]) => text);
+        this.eventBanner.replaceChildren(...pieces.map(([icon, text]) => {
+            const chip = el('span', 'event-chip');
+            chip.append(el('span', 'event-icon', icon), document.createTextNode(` ${text}`));
+            return chip;
+        }));
+        this.eventBanner.classList.toggle('hidden', pieces.length === 0);
     }
 
     handleSaveSettings() {
@@ -672,6 +761,16 @@ class UIManager {
                 }
             } catch (_) { }
         }
+
+        // Save budget + exchange date
+        try {
+            const { budget, date } = this.eventDetails();
+            if (budget.trim()) localStorage.setItem(this.STORAGE_KEY_BUDGET, budget.trim());
+            else localStorage.removeItem(this.STORAGE_KEY_BUDGET);
+            if (date) localStorage.setItem(this.STORAGE_KEY_DATE, date);
+            else localStorage.removeItem(this.STORAGE_KEY_DATE);
+        } catch (_) { }
+        this.renderEventBanner();
 
         // Save Theme
         if (this.themeSelect) {
@@ -768,8 +867,8 @@ class UIManager {
         }
     }
 
-    handleCopy() {
-        const results = [];
+    resultLines() {
+        const lines = [];
         document.querySelectorAll('.result-card').forEach(card => {
             const giver = card.querySelector('.giver').textContent;
             const receiver = card.querySelector('.receiver').textContent;
@@ -778,10 +877,21 @@ class UIManager {
             if (noteEl) {
                 line += ` (${noteEl.textContent.trim()})`;
             }
-            results.push(line);
+            lines.push(line);
         });
+        return lines;
+    }
 
-        const textToCopy = results.join('\n');
+    shareText() {
+        const summary = EventDetails.summaryLine(this.eventDetails());
+        const lines = this.resultLines();
+        return (summary ? [summary, '', ...lines] : lines).join('\n');
+    }
+
+    handleCopy() {
+        const results = this.resultLines();
+        if (results.length === 0) return;
+        const textToCopy = this.shareText();
         navigator.clipboard.writeText(textToCopy).then(() => {
             const originalText = this.copyBtn.textContent;
             this.copyBtn.textContent = 'Copied!';
@@ -795,22 +905,12 @@ class UIManager {
     }
 
     handleEmail() {
-        const results = [];
-        document.querySelectorAll('.result-card').forEach(card => {
-            const giver = card.querySelector('.giver').textContent;
-            const receiver = card.querySelector('.receiver').textContent;
-            let line = `${giver} -> ${receiver}`;
-            const noteEl = card.querySelector('.wishlist-note');
-            if (noteEl) {
-                line += ` (${noteEl.textContent.trim()})`;
-            }
-            results.push(line);
-        });
+        const results = this.resultLines();
 
         if (results.length === 0) return;
 
         const subject = encodeURIComponent("Gift Exchange Assignments");
-        const bodyContent = "Here are the Gift Exchange assignments:\n\n" + results.join('\n') + "\n\nGenerated by the Gift Exchange Helper.";
+        const bodyContent = "Here are the Gift Exchange assignments:\n\n" + this.shareText() + "\n\nGenerated by the Gift Exchange Helper.";
         const body = encodeURIComponent(bodyContent);
 
         window.location.href = `mailto:?subject=${subject}&body=${body}`;
@@ -946,6 +1046,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         Person,
         GiftExchangeService,
+        EventDetails,
         parseBulkList,
         ParticipantStore,
         UIManager,

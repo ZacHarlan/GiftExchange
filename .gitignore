@@ -28,3 +28,6 @@ credentials.json
 # Blender intermediate renders (rebuild with: bash art/render.sh)
 art/build/
 __pycache__/
+
+# Agent worktrees
+.claude/worktrees/
