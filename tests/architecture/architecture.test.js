@@ -5,7 +5,9 @@
 // Enforces the layer rules in tests/architecture/rules.js against the ratchet
 // baseline. New violations fail; existing (baselined) ones are tolerated.
 
-const { RULES, classBodies, computeViolations, loadBaseline } = require('./rules.js');
+const fs = require('fs');
+const path = require('path');
+const { RULES, SOURCES, classBodies, computeViolations, loadBaseline } = require('./rules.js');
 
 const current = computeViolations();
 const baseline = loadBaseline();
@@ -75,5 +77,22 @@ module.exports = { Person };
     test('comments do not count as violations', () => {
         const b = classBodies('class Person {\n    // uses document and fetch( in prose\n}\n');
         expect(RULES.find(r => r.id === 'domain-no-browser-apis').scan(b, '').Person).toBe(0);
+    });
+});
+
+describe('rule coverage', () => {
+    test('every app script loaded by index.html is scanned', () => {
+        const html = fs.readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
+        const loaded = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/g)].map(m => m[1]);
+        expect(loaded.length).toBeGreaterThan(0);
+        for (const src of loaded) expect(SOURCES).toContain(src);
+    });
+
+    test('BadSantaGame is held to the domain rules', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'bad-santa.js'), 'utf8');
+        expect(Object.keys(classBodies(src))).toContain('BadSantaGame');
+        const rule = RULES.find(r => r.id === 'domain-no-browser-apis');
+        const bodies = classBodies('class BadSantaGame {\n    x() { return document.title; }\n}\n');
+        expect(rule.scan(bodies, '').BadSantaGame).toBe(1);
     });
 });
