@@ -146,6 +146,7 @@
             <p id="repeatNote" class="repeat-note hidden">✨ Nobody has the same person as last year.</p>
             <div id="resultsList" class="results-grid"></div>
             <button id="partyBtn" class="party-btn" type="button">🎉 Party reveal <span>— one at a time, for the big screen</span></button>
+            <button id="printBtn" class="secondary-btn print-btn" type="button">🏷️ Print gift tags</button>
             <div class="result-actions">
                 <button id="reshuffleBtn" class="secondary-btn">Reshuffle</button>
                 <button id="emailBtn" class="secondary-btn">Email results</button>
@@ -178,6 +179,9 @@
         </div>
         <p id="loadingText" class="loading-text">Checking Naughty List...</p>
     </div>
+
+    <!-- Printable gift tags (filled in by "Print gift tags"; only visible on paper) -->
+    <section id="printSheet" class="print-sheet" aria-hidden="true"></section>
 
     <!-- Party reveal: one match at a time, for the TV -->
     <div id="partyOverlay" class="party-overlay hidden" role="dialog" aria-modal="true" aria-label="Party reveal">

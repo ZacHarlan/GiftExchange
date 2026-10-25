@@ -143,4 +143,17 @@ test.describe('Gift Exchange App', () => {
         await page.keyboard.press('Escape');
         await expect(page.locator('#partyOverlay')).toBeHidden();
     });
+
+    test('print gift tags builds one tag per match and opens the print dialog', async ({ page }) => {
+        await page.click('#toggleBulkBtn');
+        await page.fill('#bulkInput', 'Ann Frost [F1], Ben Frost [F2], Cal Pike [P]');
+        await page.click('#importBtn');
+        await page.click('#shuffleBtn');
+        await expect(page.locator('#loadingOverlay')).toBeHidden({ timeout: 10000 });
+        await page.evaluate(() => { window.print = () => { window.__printed = true; }; });
+        await page.click('#printBtn');
+        await expect(page.locator('#printSheet .gift-tag')).toHaveCount(3);
+        expect(await page.evaluate(() => window.__printed)).toBe(true);
+        await expect(page.locator('#printSheet')).toBeHidden(); // only visible on paper
+    });
 });

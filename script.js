@@ -910,6 +910,7 @@ class UIManager {
         this.exchangeService = exchangeService;
         this.sound = soundService || null;
         this.partyReveal = partyReveal || new PartyReveal(this.sound);
+        this.print = () => window.print();
         this.lastAssignments = [];
         this.animationService = animationService;
         this.participantStore = participantStore || new ParticipantStore(UIManager.browserStorage());
@@ -957,6 +958,8 @@ class UIManager {
         this.repeatNote = document.getElementById('repeatNote');
         this.soundToggle = document.getElementById('soundToggle');
         this.partyBtn = document.getElementById('partyBtn');
+        this.printBtn = document.getElementById('printBtn');
+        this.printSheet = document.getElementById('printSheet');
 
         // List chrome (optional elements)
         this.nameCount = document.getElementById('nameCount');
@@ -1070,6 +1073,10 @@ class UIManager {
 
         if (this.clearListBtn) {
             this.clearListBtn.addEventListener('click', () => this.handleClearList());
+        }
+
+        if (this.printBtn) {
+            this.printBtn.addEventListener('click', () => this.handlePrintTags());
         }
 
         if (this.partyBtn) {
@@ -1468,6 +1475,26 @@ class UIManager {
         this.resetBtn.classList.remove('hidden');
 
         this.setInputsDisabled(true);
+    }
+
+    // One gift tag per match. The stub names the giver so the host can hand tags
+    // out privately; the giver tears it off and the tag goes on the present.
+    handlePrintTags() {
+        if (!this.printSheet || this.lastAssignments.length === 0) return;
+        const details = EventDetails.summaryLine(this.eventDetails());
+        this.printSheet.replaceChildren(...this.lastAssignments.map(({ giver, receiver }) => {
+            const tag = el('article', 'gift-tag');
+            const body = el('div', 'tag-body');
+            body.append(
+                el('p', 'tag-to', `To: ${receiver.getFullName()}`),
+                el('p', 'tag-from', 'From: Your Secret Santa 🎅')
+            );
+            if (receiver.wishlist) body.append(el('p', 'tag-wishlist', `Wishlist: ${receiver.wishlist}`));
+            if (details) body.append(el('p', 'tag-details', details));
+            tag.append(body, el('p', 'tag-stub', `✂ for ${giver.getFullName()}`));
+            return tag;
+        }));
+        this.print();
     }
 
     // Land on the reveal right after the animation — no manual scrolling.
