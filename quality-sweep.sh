@@ -151,8 +151,9 @@ jq -e '.permissions.ask | index("Bash(git push *)")' "$S" >/dev/null 2>&1 \
 
 GUARD=scripts/hooks/guard-destructive-commands.sh
 if [[ -x "$GUARD" ]]; then
-  if echo '{"tool_input":{"command":"cd /tmp && gh pr merge 1"}}' | bash "$GUARD" >/dev/null 2>&1; then
-    fail "$GUARD did NOT block a chained 'gh pr merge'"
+  # Plain merges are allowed (owner decision 2026-10-25); an admin merge that skips checks is not.
+  if echo '{"tool_input":{"command":"cd /tmp && gh pr merge 1 --admin"}}' | bash "$GUARD" >/dev/null 2>&1; then
+    fail "$GUARD did NOT block a chained 'gh pr merge --admin'"
   else
     ok "PreToolUse guard blocks chained destructive commands"
   fi

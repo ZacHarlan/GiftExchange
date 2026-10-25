@@ -119,7 +119,9 @@ Pick the lowest `priority` entry with `passes: false` whose `depends_on` all pas
 
 ## Security guardrails
 
-**Human-only actions** (blocked by `.claude/settings.json` + `scripts/hooks/guard-destructive-commands.sh`): merging/approving PRs, force-push, pushing to `main`, `gh api` writes, releases, workflow runs, `npm publish`, history rewrites, `--no-verify`.
+**Human-only actions** (blocked by `scripts/hooks/guard-destructive-commands.sh` and the git hooks): approving PRs, admin/bypass merges (`--admin`), force-push, pushing to `main`, `gh api` writes, releases, workflow runs, `npm publish`, history rewrites, `--no-verify`.
+
+**Agents may merge PRs** (owner decision 2026-10-25), with `gh pr merge` only, and only once every CI check on the PR's latest commit is green. Merging publishes the site (GitHub Pages serves `main`), so confirm the live site afterwards.
 
 **Sensitive paths** — do not edit without recorded human approval (`claude-progress.txt` + `SECURITY-REVIEW: <name>` commit trailer, enforced by `scripts/hooks/commit-msg`):
 

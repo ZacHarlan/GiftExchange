@@ -45,11 +45,11 @@ check() {
 }
 
 echo "── Must BLOCK ─────────────────────────────────────────────────────"
-# Merging — the most-reported incident. Every evasion shape must be covered.
-check block "gh pr merge 42"
+# Merging: plain merges are allowed in this repo (owner decision 2026-10-25), but
+# admin/bypass merges that skip GitHub's checks are not — in any wrapper shape.
 check block "gh pr merge 42 --admin --squash"
-check block "cd /some/repo && gh pr merge 42"          # deny-list prefix evasion
-check block "bash -c 'gh pr merge 42'"                 # wrapper evasion
+check block "cd /some/repo && gh pr merge 42 --admin"  # deny-list prefix evasion
+check block "bash -c 'gh pr merge 42 --admin'"         # wrapper evasion
 check block "gh pr review 42 --approve"
 check block "gh api -X PUT repos/o/r/pulls/1/merge"
 check block "gh api -X DELETE repos/o/r/branches/main/protection"
@@ -105,6 +105,8 @@ check allow "git add ."
 check allow "git push origin feat/my-feature"
 check allow "git push -u origin fix/bug-123"
 check allow "gh pr create --fill"
+check allow "gh pr merge 1 --merge"
+check allow "gh pr merge 1 --squash --delete-branch"
 check allow "gh pr view 42"
 check allow "gh pr checks 42"
 check allow "gh run list"
