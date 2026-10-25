@@ -330,8 +330,149 @@ function parseMatchLines(text) {
     return pairs;
 }
 
+// --- Sound ---
+
+// Festive sound effects synthesised with Web Audio (no audio files to download).
+// The AudioContext factory is injected so tests can use a fake; without Web Audio it's silent.
+class SoundService {
+    constructor(createContext) {
+        this.createContext = createContext || SoundService.browserContext;
+        this.enabled = true;
+        this.ctx = undefined;
+    }
+
+    static browserContext() {
+        const Ctor = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
+        return Ctor ? new Ctor() : null;
+    }
+
+    setEnabled(on) {
+        this.enabled = Boolean(on);
+    }
+
+    isEnabled() {
+        return this.enabled;
+    }
+
+    context() {
+        if (this.ctx === undefined) {
+            try {
+                this.ctx = this.createContext() || null;
+            } catch (_) {
+                this.ctx = null;
+            }
+        }
+        if (this.ctx && this.ctx.state === 'suspended' && this.ctx.resume) {
+            this.ctx.resume().catch(() => { });
+        }
+        return this.ctx;
+    }
+
+    play(name) {
+        if (!this.enabled) return;
+        const effect = SoundService.EFFECTS[name];
+        if (!effect) return;
+        const ctx = this.context();
+        if (!ctx) return;
+        try {
+            effect(this, ctx.currentTime);
+        } catch (_) { }
+    }
+
+    // A single enveloped oscillator note.
+    tone(t, { freq, endFreq, dur = 0.3, type = 'sine', gain = 0.15, attack = 0.005 }) {
+        const ctx = this.ctx;
+        const osc = ctx.createOscillator();
+        const amp = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t);
+        if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+        amp.gain.setValueAtTime(0.0001, t);
+        amp.gain.linearRampToValueAtTime(gain, t + attack);
+        amp.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        osc.connect(amp).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + dur + 0.05);
+    }
+
+    // Filtered white noise: shakers, sizzle, whoosh, drums.
+    noise(t, { dur = 0.2, gain = 0.15, type = 'bandpass', freq = 4000, endFreq, q = 1, attack = 0.005 }) {
+        const ctx = this.ctx;
+        const length = Math.max(1, Math.floor(ctx.sampleRate * dur));
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = type;
+        filter.frequency.setValueAtTime(freq, t);
+        if (endFreq) filter.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+        filter.Q.value = q;
+        const amp = ctx.createGain();
+        amp.gain.setValueAtTime(0.0001, t);
+        amp.gain.linearRampToValueAtTime(gain, t + attack);
+        amp.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        src.connect(filter).connect(amp).connect(ctx.destination);
+        src.start(t);
+        src.stop(t + dur + 0.05);
+    }
+
+    static get EFFECTS() {
+        return {
+            // Sleigh bells: jingly shaker hits with bright bell tones.
+            jingle: (s, t) => {
+                const bells = [2093, 2637, 3136, 2349];
+                for (let i = 0; i < 10; i++) {
+                    const at = t + i * 0.11 + (i % 2) * 0.03;
+                    s.noise(at, { dur: 0.09, gain: 0.07, type: 'highpass', freq: 7000 });
+                    s.tone(at, { freq: bells[i % bells.length], dur: 0.18, type: 'triangle', gain: 0.045 });
+                }
+            },
+            // Spinning dreidel: a rising and falling breath of air.
+            whoosh: (s, t) => {
+                s.noise(t, { dur: 0.7, gain: 0.12, freq: 350, endFreq: 2200, q: 2, attack: 0.2 });
+            },
+            // Bell chime: a few partials with a long ring.
+            chime: (s, t) => {
+                [[880, 0.12], [1318.5, 0.08], [1760, 0.06], [2637, 0.03]].forEach(([f, g], i) =>
+                    s.tone(t + i * 0.015, { freq: f, dur: 1.4, gain: g }));
+            },
+            // Latkes in the pan.
+            sizzle: (s, t) => {
+                s.noise(t, { dur: 0.9, gain: 0.07, type: 'highpass', freq: 3000, attack: 0.08 });
+                for (let i = 0; i < 6; i++) s.noise(t + 0.1 + i * 0.12, { dur: 0.03, gain: 0.05, type: 'highpass', freq: 5000 });
+            },
+            // Gelt clinking.
+            coins: (s, t) => {
+                [0, 0.13, 0.27].forEach((d, i) => {
+                    s.tone(t + d, { freq: 2400 + i * 300, dur: 0.15, type: 'triangle', gain: 0.07 });
+                    s.tone(t + d, { freq: 3600 + i * 300, dur: 0.1, type: 'sine', gain: 0.04 });
+                });
+            },
+            // Little fanfare for the reveal.
+            tada: (s, t) => {
+                s.tone(t, { freq: 523.25, dur: 0.12, type: 'triangle', gain: 0.1 });
+                [523.25, 659.25, 783.99, 1046.5].forEach(f =>
+                    s.tone(t + 0.13, { freq: f, dur: 1.0, type: 'triangle', gain: 0.07, attack: 0.02 }));
+                s.noise(t + 0.13, { dur: 0.4, gain: 0.05, type: 'highpass', freq: 6000 });
+            },
+            tick: (s, t) => {
+                s.tone(t, { freq: 1250, dur: 0.06, gain: 0.05 });
+            },
+            // Snare roll that swells (used before each party-mode reveal).
+            drumroll: (s, t) => {
+                for (let i = 0; i < 26; i++) {
+                    s.noise(t + i * 0.045, { dur: 0.05, gain: 0.03 + i * 0.004, freq: 1800, q: 0.7 });
+                }
+            },
+        };
+    }
+}
+
 class AnimationService {
-    constructor() {
+    constructor(sound) {
+        this.sound = sound || null;
         this.overlay = document.getElementById('loadingOverlay');
         this.loadingText = document.getElementById('loadingText');
         this.giftIcon = document.getElementById('giftIcon');
@@ -361,8 +502,13 @@ class AnimationService {
         };
     }
 
+    sfx(name) {
+        if (this.sound) this.sound.play(name);
+    }
+
     play(theme, callback) {
         const isHanukkah = theme === 'hanukkah';
+        this.sfx(isHanukkah ? 'whoosh' : 'jingle');
         this.overlay.classList.remove('hidden');
         this.overlay.style.display = 'flex';
 
@@ -389,13 +535,18 @@ class AnimationService {
                 this.loadingText.textContent = messages[step];
                 if (isHanukkah) {
                     this.showHanukkahStep(step);
+                    this.sfx(['', 'chime', 'sizzle', 'coins'][step]);
                 } else if (step === messages.length - 1) {
                     this.openGift();
+                    this.sfx('chime');
+                } else {
+                    this.sfx('tick');
                 }
                 return;
             }
 
             clearInterval(interval);
+            this.sfx('tada');
             if (isHanukkah) {
                 if (this.hanukkahContainer) this.hanukkahContainer.classList.add('pop-out');
             } else {
@@ -578,8 +729,9 @@ function el(tag, className, text) {
 }
 
 class UIManager {
-    constructor(exchangeService, animationService, participantStore, matchHistory) {
+    constructor(exchangeService, animationService, participantStore, matchHistory, soundService) {
         this.exchangeService = exchangeService;
+        this.sound = soundService || null;
         this.animationService = animationService;
         this.participantStore = participantStore || new ParticipantStore(UIManager.browserStorage());
         this.matchHistory = matchHistory || new MatchHistory(UIManager.browserStorage());
@@ -590,6 +742,7 @@ class UIManager {
         this.STORAGE_KEY_BUDGET = 'giftExchange.budget';
         this.STORAGE_KEY_DATE = 'giftExchange.date';
         this.STORAGE_KEY_AVOID_REPEATS = 'giftExchange.avoidRepeats';
+        this.STORAGE_KEY_SOUND = 'giftExchange.sound';
         this.now = () => new Date();
 
         // Elements
@@ -623,6 +776,7 @@ class UIManager {
         this.avoidRepeatsToggle = document.getElementById('avoidRepeatsToggle');
         this.lastYearInput = document.getElementById('lastYearInput');
         this.repeatNote = document.getElementById('repeatNote');
+        this.soundToggle = document.getElementById('soundToggle');
 
         // List chrome (optional elements)
         this.nameCount = document.getElementById('nameCount');
@@ -738,6 +892,17 @@ class UIManager {
             this.clearListBtn.addEventListener('click', () => this.handleClearList());
         }
 
+        if (this.soundToggle && this.sound) {
+            this.soundToggle.addEventListener('click', () => {
+                this.sound.setEnabled(!this.sound.isEnabled());
+                try {
+                    localStorage.setItem(this.STORAGE_KEY_SOUND, this.sound.isEnabled() ? 'on' : 'off');
+                } catch (_) { }
+                this.renderSoundToggle();
+                this.sound.play('tick');
+            });
+        }
+
         // Delete buttons (event delegation — no globals, no inline handlers)
         this.nameList.addEventListener('click', (e) => {
             const btn = e.target.closest('.delete-btn');
@@ -795,6 +960,14 @@ class UIManager {
         } catch (_) { }
         this.renderEventBanner();
 
+        // Sound on/off
+        if (this.sound) {
+            let saved = null;
+            try { saved = localStorage.getItem(this.STORAGE_KEY_SOUND); } catch (_) { }
+            this.sound.setEnabled(saved !== 'off');
+        }
+        this.renderSoundToggle();
+
         // Last year's matches
         if (this.avoidRepeatsToggle) {
             let saved = null;
@@ -805,6 +978,15 @@ class UIManager {
             this.lastYearInput.value = this.matchHistory.getYear(this.exchangeYear() - 1)
                 .map(p => `${p.giver} -> ${p.receiver}`).join('\n');
         }
+    }
+
+    renderSoundToggle() {
+        if (!this.soundToggle) return;
+        const on = Boolean(this.sound && this.sound.isEnabled());
+        this.soundToggle.setAttribute('aria-pressed', String(on));
+        this.soundToggle.setAttribute('aria-label', on ? 'Sound on — click to mute' : 'Sound off — click to unmute');
+        this.soundToggle.textContent = on ? '🔔' : '🔕';
+        this.soundToggle.classList.toggle('muted', !on);
     }
 
     // The year this exchange belongs to: the exchange date's year, else this year.
@@ -1145,8 +1327,9 @@ class UIManager {
 if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', () => {
         const exchangeService = new GiftExchangeService();
-        const animationService = new AnimationService();
-        new UIManager(exchangeService, animationService);
+        const sound = new SoundService();
+        const animationService = new AnimationService(sound);
+        new UIManager(exchangeService, animationService, undefined, undefined, sound);
     });
 }
 
@@ -1155,6 +1338,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         Person,
         GiftExchangeService,
+        SoundService,
         EventDetails,
         MatchHistory,
         parseMatchLines,
