@@ -36,6 +36,7 @@
             <p class="eyebrow"><span class="eyebrow-christmas">✦ Secret Santa ✦</span><span class="eyebrow-hanukkah">✦ Hanukkah Swap ✦</span></p>
             <h1>Holiday Gift Exchange</h1>
             <p class="tagline">Add everyone, press the big button, and let the holiday magic pick.</p>
+            <p id="eventBanner" class="event-banner hidden" aria-live="polite"></p>
         </header>
 
         <section class="input-section">
@@ -86,6 +87,16 @@
                     <option value="christmas">🎄 Christmas — Santa &amp; gifts</option>
                     <option value="hanukkah">🕎 Hanukkah — dreidel &amp; menorah</option>
                 </select>
+                <div class="field-pair">
+                    <div>
+                        <label for="budgetInput" class="field-label">Budget</label>
+                        <input type="text" id="budgetInput" placeholder="e.g. 50" autocomplete="off" inputmode="decimal">
+                    </div>
+                    <div>
+                        <label for="exchangeDateInput" class="field-label">Exchange date</label>
+                        <input type="date" id="exchangeDateInput">
+                    </div>
+                </div>
                 <div class="field-label-row">
                     <label for="coreFamiliesInput" class="field-label">Core families</label>
                     <details class="help-details">

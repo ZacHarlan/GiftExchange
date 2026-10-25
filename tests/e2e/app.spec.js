@@ -110,4 +110,18 @@ test.describe('Gift Exchange App', () => {
         await expect(page.locator('#nameList li', { hasText: 'Ann Frost' })).toContainText('[Frost 1]');
         await expect(page.locator('#nameList li', { hasText: 'Cal Frost' })).toContainText('[Frost 2]');
     });
+
+    test('should show budget, date and countdown in the header and keep them after reload', async ({ page }) => {
+        const inNineDays = new Date(Date.now() + 9 * 86400000);
+        const iso = `${inNineDays.getFullYear()}-${String(inNineDays.getMonth() + 1).padStart(2, '0')}-${String(inNineDays.getDate()).padStart(2, '0')}`;
+        await page.click('#toggleSettingsBtn');
+        await page.fill('#budgetInput', '50');
+        await page.fill('#exchangeDateInput', iso);
+        await page.click('#saveCoreFamiliesBtn');
+        const banner = page.locator('#eventBanner');
+        await expect(banner).toContainText('$50 limit');
+        await expect(banner).toContainText('9 days to go');
+        await page.reload();
+        await expect(page.locator('#eventBanner')).toContainText('$50 limit');
+    });
 });
