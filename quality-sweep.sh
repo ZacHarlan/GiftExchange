@@ -142,8 +142,10 @@ S=.claude/settings.json
 # deny list into the owner's .claude/settings.local.json. Report the state; don't fail on it.
 jq -e '.permissions.deny | index("Bash(gh pr merge:*)")' "$S" >/dev/null 2>&1 \
   && ok "$S denies PR merge" || warn "$S does not deny PR merge (owner decision 2026-10-25; the guard hook still blocks it)"
+# Owner decision 2026-10-25: pushes allowed without a prompt via .claude/settings.local.json.
+# The guard hook + pre-push hook still block force-pushes and pushes to main.
 jq -e '.permissions.ask | index("Bash(git push *)")' "$S" >/dev/null 2>&1 \
-  && ok "'git push' requires confirmation (survives auto mode)" || fail "No ask rule for 'Bash(git push *)'"
+  && ok "'git push' requires confirmation (survives auto mode)" || warn "No ask rule for 'git push' (owner decision 2026-10-25; main + force-push still blocked by hooks)"
 [[ "$(jq -r '.permissions.disableBypassPermissionsMode // ""' "$S")" == "disable" ]] \
   && ok "bypassPermissions mode disabled for this project" || warn "bypassPermissions mode still available"
 
