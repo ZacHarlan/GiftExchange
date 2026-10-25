@@ -36,3 +36,5 @@ BLOCKED: Human approval needed for:
             and in scripts/hooks/pre-push add gh-pages to PROTECTED_RE.
             (Agent edit was blocked by the guard itself mid-session — correct behavior.)
          4. untrack-node-modules-coverage — git rm -r --cached node_modules coverage (~7,300 files).
+
+APPROVAL 2026-10-25: Zac Harlan approved (in chat) adding .github/workflows/ci.yml. Committed with SECURITY-REVIEW trailer.

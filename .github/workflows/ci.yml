@@ -1,6 +1,4 @@
-# PROPOSED — not active. To adopt (needs human approval; .github/workflows/ is a sensitive path):
-#   mkdir -p .github/workflows && git mv docs/proposals/ci.yml .github/workflows/ci.yml
-#   commit with trailer:  SECURITY-REVIEW: <your-name>
+# CI — approved by Zac Harlan in chat, 2026-10-25.
 # The job name "test" is what harden-github.sh requires as a status check.
 name: CI
 

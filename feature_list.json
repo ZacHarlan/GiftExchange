@@ -93,7 +93,7 @@
   {
     "id": "architecture-baseline-zero",
     "category": "quality",
-    "description": "No baselined violations remain — every architecture rule passes outright.",
+    "description": "No baselined violations remain \u2014 every architecture rule passes outright.",
     "verification": "node -e \"const b=require('./tests/architecture/baseline.json'); process.exit(Object.keys(b).filter(k => !k.startsWith('_')).length ? 1 : 0)\"",
     "priority": 23,
     "depends_on": [
@@ -114,7 +114,7 @@
   {
     "id": "ci-workflow-active",
     "category": "quality",
-    "description": "HUMAN APPROVAL: move docs/proposals/ci.yml to .github/workflows/ci.yml (SECURITY-REVIEW trailer) so tests run on every PR even when hooks are skipped.",
+    "description": "CI workflow .github/workflows/ci.yml runs unit, e2e, guardrail and baseline checks on every PR and push to main. Approved by Zac Harlan in chat 2026-10-25.",
     "verification": "test -f .github/workflows/ci.yml && gh run list --workflow ci.yml --limit 1 --json conclusion -q '.[0].conclusion' | grep -qx success",
     "priority": 40,
     "depends_on": [
