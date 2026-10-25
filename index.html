@@ -41,6 +41,11 @@
             <p id="eventBanner" class="event-banner hidden" aria-live="polite"></p>
         </header>
 
+        <div id="modeSwitch" class="mode-switch" role="group" aria-label="Game mode">
+            <button type="button" data-mode="secret-santa" class="active" aria-pressed="true">🎁 Secret Santa</button>
+            <button type="button" data-mode="bad-santa" aria-pressed="false">😈 Bad Santa</button>
+        </div>
+
         <section class="input-section">
             <div class="input-group">
                 <input type="text" id="firstNameInput" placeholder="First name" autocomplete="off" aria-label="First name">
@@ -146,6 +151,8 @@
                 <button id="copyBtn" class="primary-btn">Copy results</button>
             </div>
         </section>
+
+        <section id="badSantaSection" class="bad-santa-section" aria-live="polite"></section>
     </main>
 
     <!-- Shuffle animation (art rendered in Blender — see art/) -->
@@ -172,6 +179,7 @@
     </div>
 
     <script src="script.js"></script>
+    <script src="bad-santa.js"></script>
 </body>
 
 </html>
