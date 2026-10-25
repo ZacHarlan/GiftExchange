@@ -97,6 +97,70 @@
     "passes": true
   },
   {
+    "id": "numbered-surnames",
+    "category": "functional",
+    "description": "'Zac Harlan 1' means surname Harlan, family 'Harlan 1' (form and bulk import); families split in shuffles; core families still match.",
+    "verification": "npx jest tests/unit/numbered-surnames.test.js",
+    "priority": 13,
+    "passes": true
+  },
+  {
+    "id": "bulk-import-formats",
+    "category": "functional",
+    "description": "Bulk import accepts commas or one-per-line, and a stand-alone [family] / {wishlist} attaches to the name before it ('Ann Frost, [Frost 1],').",
+    "verification": "npx jest tests/unit/bulk-import-format.test.js && npm run test:e2e -- -g 'one-per-line'",
+    "priority": 14,
+    "passes": true
+  },
+  {
+    "id": "auto-scroll-results",
+    "category": "functional",
+    "description": "After the shuffle animation the page scrolls to The Big Reveal (instant under reduced motion).",
+    "verification": "npm run test:e2e -- -g 'scroll the results'",
+    "priority": 15,
+    "passes": true
+  },
+  {
+    "id": "budget-date-countdown",
+    "category": "functional",
+    "description": "Budget + exchange date in Settings; header chips with countdown; snow thickens near the day; included in copied/emailed results.",
+    "verification": "npx jest tests/unit/event-details.test.js && npm run test:e2e -- -g 'budget, date and countdown'",
+    "priority": 16,
+    "passes": true
+  },
+  {
+    "id": "no-repeat-last-year",
+    "category": "functional",
+    "description": "Shuffles are saved per year (giftExchange.history); 'Avoid last year's matches' (default on) excludes last year's pairs; last year's matches editable in Settings.",
+    "verification": "npx jest tests/unit/no-repeats.test.js",
+    "priority": 17,
+    "passes": true
+  },
+  {
+    "id": "sound-effects",
+    "category": "functional",
+    "description": "Web Audio sound effects for both themes (bells, chime, ta-da, whoosh, sizzle, coins, drumroll) with a remembered mute toggle.",
+    "verification": "npx jest tests/unit/sound.test.js",
+    "priority": 18,
+    "passes": true
+  },
+  {
+    "id": "party-reveal",
+    "category": "functional",
+    "description": "Full-screen party mode: one match at a time with drumroll, opening gift, receiver + confetti; Next/Back/keys/Esc; finale.",
+    "verification": "npx jest tests/unit/party-reveal.test.js && npm run test:e2e -- -g 'party reveal'",
+    "priority": 19,
+    "passes": true
+  },
+  {
+    "id": "print-gift-tags",
+    "category": "functional",
+    "description": "Print one gift tag per match (To receiver, From Secret Santa, wishlist, budget/date) with a tear-off stub naming the giver; only tags print.",
+    "verification": "npx jest tests/unit/print-tags.test.js && npm run test:e2e -- -g 'print gift tags'",
+    "priority": 20,
+    "passes": true
+  },
+  {
     "id": "fix-html-injection",
     "category": "quality",
     "description": "renderList/displayResults build DOM with createElement + textContent so names/wishlists can't inject markup. Lower no-html-interpolation in baseline.json to 0 (delete the entry). Add a regression test: a name like <img src=x onerror=...> renders as text.",
@@ -123,7 +187,7 @@
   {
     "id": "architecture-baseline-zero",
     "category": "quality",
-    "description": "No baselined violations remain \u2014 every architecture rule passes outright.",
+    "description": "No baselined violations remain — every architecture rule passes outright.",
     "verification": "node -e \"const b=require('./tests/architecture/baseline.json'); process.exit(Object.keys(b).filter(k => !k.startsWith('_')).length ? 1 : 0)\"",
     "priority": 23,
     "depends_on": [
@@ -150,7 +214,7 @@
     "depends_on": [
       "quality-sweep-clean"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": "github-branch-protection",
