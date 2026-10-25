@@ -769,6 +769,7 @@ body[data-theme="hanukkah"] #addBtn {
 
 /* --- Results: gift tags ---------------------------------------------------- */
 .results-section {
+    scroll-margin-top: 1.25rem;
     margin-top: 2rem;
     padding-top: 1.75rem;
     border-top: 1px dashed var(--card-edge);

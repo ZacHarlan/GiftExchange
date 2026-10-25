@@ -87,4 +87,18 @@ test.describe('Gift Exchange App', () => {
         await expect(page.locator('#nameList li')).toHaveCount(0);
         await expect(page.locator('#emptyState')).toBeVisible();
     });
+
+    test('should scroll the results into view after the shuffle animation', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await page.click('#toggleBulkBtn');
+        await page.fill('#bulkInput', 'Al A [A], Bo B [B], Cy C [C], Di D [D], Ed E [E], Fy F [F]');
+        await page.click('#importBtn');
+        await expect(page.locator('#resultsSection')).toBeHidden();
+
+        // Start from the top of the page (Playwright's clicks scroll on their own).
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.locator('#shuffleBtn').dispatchEvent('click');
+        await expect(page.locator('#loadingOverlay')).toBeHidden({ timeout: 10000 });
+        await expect(page.locator('#resultsSection h2')).toBeInViewport();
+    });
 });

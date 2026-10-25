@@ -201,6 +201,25 @@ describe('UIManager + AnimationService (jsdom)', () => {
         expect(document.getElementById('firstNameInput').disabled).toBe(false);
     });
 
+    test('After the animation, the page scrolls to the results', () => {
+        const scroll = jest.fn();
+        Element.prototype.scrollIntoView = scroll;
+        const service = new GiftExchangeService();
+        new UIManager(service, new AnimationService());
+        service.addPerson('Alice', 'A');
+        service.addPerson('Bob', 'B');
+        document.getElementById('shuffleBtn').disabled = false;
+        document.getElementById('shuffleBtn').click();
+
+        jest.advanceTimersByTime(800 * 4);
+        expect(scroll).not.toHaveBeenCalled(); // not while the overlay is still up
+        jest.advanceTimersByTime(500);
+        expect(scroll).toHaveBeenCalledTimes(1);
+        expect(scroll.mock.contexts[0].id).toBe('resultsSection');
+        expect(scroll.mock.calls[0][0]).toMatchObject({ behavior: 'smooth', block: 'start' });
+        delete Element.prototype.scrollIntoView;
+    });
+
     test('Remove name resets results view when visible', () => {
         const service = new GiftExchangeService();
         const animation = new AnimationService();
