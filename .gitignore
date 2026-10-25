@@ -1,0 +1,26 @@
+# Dependencies & generated reports
+# NOTE: node_modules/ and coverage/ are currently TRACKED (committed in efdc4cf), so these
+# lines have no effect until they're untracked:  git rm -r --cached node_modules coverage
+node_modules/
+coverage/
+test-results/
+playwright-report/
+
+# Harness runtime artifacts
+.logs/
+.pids/
+
+# Local secrets — never commit (the app needs none)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+
+# Local Claude Code overrides (shared rules live in .claude/settings.json)
+.claude/settings.local.json
+
+# OS
+.DS_Store

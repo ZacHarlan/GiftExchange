@@ -1,0 +1,34 @@
+# PROPOSED — not active. To adopt (needs human approval; .github/workflows/ is a sensitive path):
+#   mkdir -p .github/workflows && git mv docs/proposals/ci.yml .github/workflows/ci.yml
+#   commit with trailer:  SECURITY-REVIEW: <your-name>
+# The job name "test" is what harden-github.sh requires as a status check.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Unit + architecture tests
+        run: npm test
+      - name: E2E tests
+        run: npm run test:e2e
+      - name: Guardrail self-test
+        run: bash tests/guardrails/run.sh
+      - name: Stale architecture baseline
+        run: node tests/architecture/rules.js --stale

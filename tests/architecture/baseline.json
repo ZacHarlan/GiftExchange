@@ -1,0 +1,12 @@
+{
+  "_comment": "Existing violations recorded 2026-10-24. Counts may only go DOWN. Lower an entry when you fix one; quality-sweep.sh fails while an entry is higher than the code needs.",
+  "randomness-injected": {
+    "GiftExchangeService": 1
+  },
+  "no-html-interpolation": {
+    "UIManager": 2
+  },
+  "no-window-globals": {
+    "UIManager": 1
+  }
+}

@@ -1,0 +1,144 @@
+[
+  {
+    "id": "bootstrap-health",
+    "category": "functional",
+    "description": "bash init.sh brings the dev server up from cold; /health returns {status:ok} and / serves the app.",
+    "verification": "bash init.sh && curl -fsS http://localhost:8085/health | jq -e '.status==\"ok\"' && curl -fsS http://localhost:8085/ | grep -q 'id=\"shuffleBtn\"'",
+    "priority": 1,
+    "passes": true
+  },
+  {
+    "id": "unit-tests-green",
+    "category": "quality",
+    "description": "All Jest unit tests pass (service, UI in jsdom, dev server).",
+    "verification": "npx jest tests/unit",
+    "priority": 2,
+    "passes": true
+  },
+  {
+    "id": "architecture-tests",
+    "category": "quality",
+    "description": "Architecture rules pass against the ratchet baseline, and each rule's self-test proves it detects violations.",
+    "verification": "npm run test:arch",
+    "priority": 3,
+    "passes": true
+  },
+  {
+    "id": "e2e-tests-green",
+    "category": "functional",
+    "description": "Playwright tests run against the dev server (no file:// paths, no no-op tests) and pass.",
+    "verification": "npm run test:e2e",
+    "priority": 4,
+    "depends_on": [
+      "bootstrap-health"
+    ],
+    "passes": true
+  },
+  {
+    "id": "guardrails-block",
+    "category": "quality",
+    "description": "The PreToolUse guard blocks merges, force-pushes, pushes to main, deploys and gate bypasses, without false positives on normal dev commands.",
+    "verification": "bash tests/guardrails/run.sh",
+    "priority": 5,
+    "passes": true
+  },
+  {
+    "id": "quality-sweep-clean",
+    "category": "quality",
+    "description": "quality-sweep.sh exits 0: tests, baseline ratchet, config, debug artifacts, secrets, dead code, doc validity, guardrails, hooks.",
+    "verification": "bash quality-sweep.sh",
+    "priority": 6,
+    "depends_on": [
+      "unit-tests-green",
+      "architecture-tests",
+      "guardrails-block"
+    ],
+    "passes": true
+  },
+  {
+    "id": "blender-rendered-graphics",
+    "category": "visual",
+    "description": "Replace the flat line-icon SVGs in the shuffle overlay with Blender (Cycles) renders: wrapped gift box (closed + opening), spinning dreidel sprite with Hebrew letters, 9-branch menorah lit candle by candle, latke pan, gelt stack. Blender scene scripts live in art/ and re-render with one command; outputs go to assets/ as transparent WebP; scripts/serve.js must serve assets/. Element ids used by script.js and tests stay the same; respect prefers-reduced-motion.",
+    "verification": "test -f art/render.sh && ls assets/*.webp >/dev/null && curl -fsS -o /dev/null http://localhost:8085/assets/gift.webp && npm test && npm run test:e2e",
+    "priority": 10,
+    "depends_on": [
+      "e2e-tests-green"
+    ],
+    "passes": false
+  },
+  {
+    "id": "fix-html-injection",
+    "category": "quality",
+    "description": "renderList/displayResults build DOM with createElement + textContent so names/wishlists can't inject markup. Lower no-html-interpolation in baseline.json to 0 (delete the entry). Add a regression test: a name like <img src=x onerror=...> renders as text.",
+    "verification": "node -e \"const v=require('./tests/architecture/rules.js').computeViolations(); process.exit(Object.keys(v['no-html-interpolation']).length ? 1 : 0)\" && npm test",
+    "priority": 20,
+    "passes": false
+  },
+  {
+    "id": "remove-window-globals",
+    "category": "quality",
+    "description": "Replace window.removeName + inline onclick with a delegated click listener on #nameList. Remove no-window-globals from baseline.json.",
+    "verification": "node -e \"const v=require('./tests/architecture/rules.js').computeViolations(); process.exit(Object.keys(v['no-window-globals']).length ? 1 : 0)\" && ! grep -q 'onclick=' script.js && npm test && npm run test:e2e",
+    "priority": 21,
+    "passes": false
+  },
+  {
+    "id": "inject-randomness",
+    "category": "quality",
+    "description": "GiftExchangeService takes an optional random() in its constructor (default Math.random); add a deterministic test using a seeded source. Remove randomness-injected from baseline.json.",
+    "verification": "node -e \"const v=require('./tests/architecture/rules.js').computeViolations(); process.exit(Object.keys(v['randomness-injected']).length ? 1 : 0)\" && npm test",
+    "priority": 22,
+    "passes": false
+  },
+  {
+    "id": "architecture-baseline-zero",
+    "category": "quality",
+    "description": "No baselined violations remain — every architecture rule passes outright.",
+    "verification": "node -e \"const b=require('./tests/architecture/baseline.json'); process.exit(Object.keys(b).filter(k => !k.startsWith('_')).length ? 1 : 0)\"",
+    "priority": 23,
+    "depends_on": [
+      "fix-html-injection",
+      "remove-window-globals",
+      "inject-randomness"
+    ],
+    "passes": false
+  },
+  {
+    "id": "untrack-node-modules-coverage",
+    "category": "quality",
+    "description": "node_modules/ and coverage/ are committed (efdc4cf). Untrack them so they're covered by .gitignore. Needs owner OK: it's a ~7,300-file deletion in one commit, and GitHub Pages currently serves those folders too.",
+    "verification": "test -z \"$(git ls-files node_modules coverage | head -1)\"",
+    "priority": 30,
+    "passes": false
+  },
+  {
+    "id": "ci-workflow-active",
+    "category": "quality",
+    "description": "HUMAN APPROVAL: move docs/proposals/ci.yml to .github/workflows/ci.yml (SECURITY-REVIEW trailer) so tests run on every PR even when hooks are skipped.",
+    "verification": "test -f .github/workflows/ci.yml && gh run list --workflow ci.yml --limit 1 --json conclusion -q '.[0].conclusion' | grep -qx success",
+    "priority": 40,
+    "depends_on": [
+      "quality-sweep-clean"
+    ],
+    "passes": false
+  },
+  {
+    "id": "github-branch-protection",
+    "category": "quality",
+    "description": "HUMAN ACTION: run `bash harden-github.sh ZacHarlan/GiftExchange` after CI is live. main requires a PR + green 'test' check, enforce_admins on, no force-push, auto-merge off.",
+    "verification": "gh api repos/ZacHarlan/GiftExchange/branches/main/protection --jq '.enforce_admins.enabled' | grep -qx true",
+    "priority": 41,
+    "depends_on": [
+      "ci-workflow-active"
+    ],
+    "passes": false
+  },
+  {
+    "id": "guard-blocks-gh-api-writes",
+    "category": "quality",
+    "description": "HUMAN APPROVAL (scripts/hooks/ is sensitive): make guard-destructive-commands.sh block any `gh api` with -X/--method PUT|POST|PATCH|DELETE (today only merge/protection endpoints are caught, so a chained `cd x && gh api -X PUT .../pages` slips past the prefix deny rules), and add gh-pages to PROTECTED in the guard and pre-push. Then move the 'Known gaps' cases in tests/guardrails/run.sh into 'Must BLOCK'.",
+    "verification": "! bash tests/guardrails/run.sh | grep -q OPEN",
+    "priority": 42,
+    "passes": false
+  }
+]

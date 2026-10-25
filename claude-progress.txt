@@ -1,0 +1,38 @@
+claude-progress.txt — session handoff log. Read the LAST block first.
+Format per session:
+--- YYYY-MM-DD  <model / session label> ---
+DONE   / TESTS / NEXT / BLOCKED
+Compaction rule: past ~150 lines, summarize everything except the last two blocks.
+
+--- 2026-10-25  claude-opus-5-5 / harness retrofit ---
+DONE   : Stack discovery (static vanilla-JS app, Jest+jsdom, Playwright, GitHub Pages serves main);
+         fixed 9 stale unit tests (assignments are Person objects now; jsdom DOM lacked wishlist/email ids);
+         fixed e2e: 4 of 5 tests were no-ops (returned a fn) and one hard-coded an absolute file:// path;
+         scripts/serve.js dev server + /health (+ tests); init.sh (--stop), agent-status.sh, quality-sweep.sh;
+         architecture rules + ratchet baseline (tests/architecture/); pre-commit/commit-msg/pre-push hooks;
+         .claude/settings.json + PreToolUse guard + tests/guardrails/run.sh; harden-github.sh (NOT run);
+         AGENTS.md, CLAUDE.md, SECURITY.md, .gitignore, feature_list.json, docs/proposals/ci.yml;
+         jest coverage made opt-in (npm run test:coverage) so test runs stop rewriting tracked coverage/.
+TESTS  : unit 12/21 passing → 52/52 (unit + architecture); e2e 1 real + 4 no-op → 5/5 real; guardrails 56/56.
+DECISIONS:
+         - Port 8085 (nothing in repo specified one; was free). Override with PORT.
+         - Baseline: randomness-injected=1, no-html-interpolation=2, no-window-globals=1. Only shrinks.
+         - harden-github.sh defaults REQUIRED_REVIEWS=0: solo owner can't approve own PR, and
+           enforce_admins + 1 review would lock merges. Raise when a 2nd reviewer exists.
+         - pre-commit refuses commits on main (main = live Pages site). Owner now works on branches + PRs.
+NEXT   : feature_list.json → blender-rendered-graphics (priority 10). Blender 5.2.2 at
+         /Applications/Blender.app/Contents/MacOS/Blender, M3 Pro (Cycles on Metal). PIL available in
+         python3 for sprite sheets; Hebrew font /System/Library/Fonts/SFHebrew.ttf. Start with art/render.sh +
+         art/gift.py → assets/gift.webp; extend scripts/serve.js SERVABLE to assets/*.webp (+ test).
+BLOCKED: Human approval needed for:
+         1. ci-workflow-active — git mv docs/proposals/ci.yml .github/workflows/ci.yml (SECURITY-REVIEW trailer).
+         2. github-branch-protection — owner runs: bash harden-github.sh ZacHarlan/GiftExchange (after CI is live).
+         3. guard-blocks-gh-api-writes — proposed edit to scripts/hooks/guard-destructive-commands.sh:
+              PROTECTED='(main|master|trunk|develop|gh-pages|release(/[^[:space:]]*)?|prod|production)'
+              and add before section 2:
+                if [[ "$norm" =~ gh[[:space:]]+api ]] && [[ "$norm" =~ (-X|--method)[[:space:]=]*(PUT|POST|PATCH|DELETE) ]]; then
+                  block "no gh api writes" "Writes via the raw API change repo/Pages/settings state." "Ask a human."
+                fi
+            and in scripts/hooks/pre-push add gh-pages to PROTECTED_RE.
+            (Agent edit was blocked by the guard itself mid-session — correct behavior.)
+         4. untrack-node-modules-coverage — git rm -r --cached node_modules coverage (~7,300 files).
