@@ -145,6 +145,7 @@
             <h2>The Big Reveal</h2>
             <p id="repeatNote" class="repeat-note hidden">✨ Nobody has the same person as last year.</p>
             <div id="resultsList" class="results-grid"></div>
+            <button id="partyBtn" class="party-btn" type="button">🎉 Party reveal <span>— one at a time, for the big screen</span></button>
             <div class="result-actions">
                 <button id="reshuffleBtn" class="secondary-btn">Reshuffle</button>
                 <button id="emailBtn" class="secondary-btn">Email results</button>
@@ -176,6 +177,31 @@
             </div>
         </div>
         <p id="loadingText" class="loading-text">Checking Naughty List...</p>
+    </div>
+
+    <!-- Party reveal: one match at a time, for the TV -->
+    <div id="partyOverlay" class="party-overlay hidden" role="dialog" aria-modal="true" aria-label="Party reveal">
+        <div id="partyConfetti" class="party-confetti" aria-hidden="true"></div>
+        <button id="partyClose" class="party-close" type="button" aria-label="Close party reveal">✕</button>
+        <p id="partyProgress" class="party-progress"></p>
+        <div id="partyCard" class="party-card">
+            <p class="party-label"><span id="partyGiver" class="party-giver"></span><span class="party-giving">is giving a gift to…</span></p>
+            <div class="party-stage">
+                <div class="burst" aria-hidden="true"></div>
+                <img id="partyGiftClosed" class="party-gift party-gift-closed" src="assets/gift.webp" alt="" width="440" height="440">
+                <img id="partyGiftOpen" class="party-gift party-gift-open hidden" src="assets/gift-open.webp" alt="" width="440" height="440">
+            </div>
+            <p id="partyReceiver" class="party-receiver hidden" aria-live="assertive"></p>
+            <p id="partyWishlist" class="party-wishlist hidden"></p>
+        </div>
+        <div id="partyFinale" class="party-finale hidden">
+            <p class="party-finale-title">That’s everyone!</p>
+            <p>Happy gift giving 🎁</p>
+        </div>
+        <div class="party-controls">
+            <button id="partyPrev" class="secondary-btn" type="button">◀ Back</button>
+            <button id="partyNext" class="primary-btn" type="button">Reveal ▶</button>
+        </div>
     </div>
 
     <script src="script.js"></script>

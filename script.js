@@ -720,6 +720,183 @@ function parseBulkList(text) {
     return people;
 }
 
+// --- Party reveal mode ---
+
+// Full-screen, one-at-a-time reveal for showing on a TV at the party:
+// giver -> drumroll while the gift shakes -> gift opens, receiver + confetti.
+class PartyReveal {
+    static get DRUMROLL_MS() {
+        return 1300;
+    }
+
+    constructor(sound) {
+        this.sound = sound || null;
+        this.items = [];
+        this.index = 0;
+        this.revealed = false;
+        this.finished = false;
+        this.timer = null;
+        const $ = (id) => document.getElementById(id);
+        this.overlay = $('partyOverlay');
+        if (!this.overlay) return;
+        this.progress = $('partyProgress');
+        this.card = $('partyCard');
+        this.giver = $('partyGiver');
+        this.giftClosed = $('partyGiftClosed');
+        this.giftOpen = $('partyGiftOpen');
+        this.receiver = $('partyReceiver');
+        this.wishlist = $('partyWishlist');
+        this.finale = $('partyFinale');
+        this.confetti = $('partyConfetti');
+        this.prevBtn = $('partyPrev');
+        this.nextBtn = $('partyNext');
+        this.closeBtn = $('partyClose');
+
+        if (this.nextBtn) this.nextBtn.addEventListener('click', () => this.next());
+        if (this.prevBtn) this.prevBtn.addEventListener('click', () => this.prev());
+        if (this.closeBtn) this.closeBtn.addEventListener('click', () => this.close());
+        document.addEventListener('keydown', (e) => this.onKey(e));
+    }
+
+    isOpen() {
+        return Boolean(this.overlay) && !this.overlay.classList.contains('hidden');
+    }
+
+    sfx(name) {
+        if (this.sound) this.sound.play(name);
+    }
+
+    open(assignments) {
+        if (!this.overlay || !Array.isArray(assignments) || assignments.length === 0) return;
+        this.items = [...assignments];
+        this.overlay.classList.remove('hidden');
+        document.body.classList.add('party-mode');
+        this.show(0);
+        if (this.nextBtn) this.nextBtn.focus();
+    }
+
+    close() {
+        this.cancel();
+        if (!this.overlay) return;
+        this.overlay.classList.add('hidden');
+        document.body.classList.remove('party-mode');
+    }
+
+    cancel() {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = null;
+    }
+
+    onKey(e) {
+        if (!this.isOpen()) return;
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            this.next();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            this.prev();
+        } else if (e.key === 'Escape') {
+            this.close();
+        }
+    }
+
+    show(i, { alreadyRevealed = false } = {}) {
+        this.cancel();
+        this.index = i;
+        this.revealed = false;
+        this.finished = false;
+        const pair = this.items[i];
+        this.card.classList.remove('hidden');
+        this.finale.classList.add('hidden');
+        this.progress.textContent = `${i + 1} of ${this.items.length}`;
+        this.giver.textContent = pair.giver.getFullName();
+        this.receiver.classList.add('hidden');
+        this.wishlist.classList.add('hidden');
+        this.giftOpen.classList.add('hidden');
+        this.giftClosed.classList.remove('hidden');
+        this.confetti.replaceChildren();
+        if (this.prevBtn) this.prevBtn.disabled = i === 0;
+        if (this.nextBtn) this.nextBtn.textContent = 'Reveal ▶';
+
+        if (alreadyRevealed) {
+            this.reveal({ quiet: true });
+            return;
+        }
+        this.sfx('drumroll');
+        this.timer = setTimeout(() => this.reveal(), PartyReveal.DRUMROLL_MS);
+    }
+
+    reveal({ quiet = false } = {}) {
+        this.cancel();
+        this.revealed = true;
+        const pair = this.items[this.index];
+        this.receiver.textContent = pair.receiver.getFullName();
+        this.receiver.classList.remove('hidden');
+        if (pair.receiver.wishlist) {
+            this.wishlist.textContent = `🎁 Wishlist: ${pair.receiver.wishlist}`;
+            this.wishlist.classList.remove('hidden');
+        }
+        this.giftClosed.classList.add('hidden');
+        this.giftOpen.classList.remove('hidden');
+        if (this.nextBtn) this.nextBtn.textContent = this.index === this.items.length - 1 ? 'Finish 🎉' : 'Next ▶';
+        if (!quiet) {
+            this.sfx('tada');
+            this.burstConfetti();
+        }
+    }
+
+    next() {
+        if (!this.isOpen()) return;
+        if (this.finished) {
+            this.close();
+            return;
+        }
+        if (!this.revealed) {
+            this.reveal();
+        } else if (this.index < this.items.length - 1) {
+            this.show(this.index + 1);
+        } else {
+            this.showFinale();
+        }
+    }
+
+    prev() {
+        if (!this.isOpen()) return;
+        if (this.finished) {
+            this.show(this.items.length - 1, { alreadyRevealed: true });
+        } else if (this.index > 0) {
+            this.show(this.index - 1, { alreadyRevealed: true });
+        }
+    }
+
+    showFinale() {
+        this.cancel();
+        this.finished = true;
+        this.card.classList.add('hidden');
+        this.finale.classList.remove('hidden');
+        this.progress.textContent = `All ${this.items.length} revealed`;
+        if (this.prevBtn) this.prevBtn.disabled = false;
+        if (this.nextBtn) this.nextBtn.textContent = 'Done';
+        this.sfx('chime');
+        this.burstConfetti(80);
+    }
+
+    burstConfetti(count = 48) {
+        const colors = ['#ff4d5e', '#ffd166', '#3ddc84', '#5fb4ff', '#ffffff', '#f5c45a'];
+        const pieces = [];
+        for (let i = 0; i < count; i++) {
+            const piece = el('i', 'confetti-piece');
+            piece.style.setProperty('--x', `${Math.round(Math.random() * 100)}vw`);
+            piece.style.setProperty('--drift', `${Math.round(Math.random() * 30 - 15)}vw`);
+            piece.style.setProperty('--delay', `${(Math.random() * 0.4).toFixed(2)}s`);
+            piece.style.setProperty('--spin', `${Math.round(Math.random() * 720 - 360)}deg`);
+            piece.style.setProperty('--c', colors[i % colors.length]);
+            pieces.push(piece);
+        }
+        this.confetti.replaceChildren(...pieces);
+    }
+}
+
 // Create an element with a class and (text-only) content.
 function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -729,9 +906,11 @@ function el(tag, className, text) {
 }
 
 class UIManager {
-    constructor(exchangeService, animationService, participantStore, matchHistory, soundService) {
+    constructor(exchangeService, animationService, participantStore, matchHistory, soundService, partyReveal) {
         this.exchangeService = exchangeService;
         this.sound = soundService || null;
+        this.partyReveal = partyReveal || new PartyReveal(this.sound);
+        this.lastAssignments = [];
         this.animationService = animationService;
         this.participantStore = participantStore || new ParticipantStore(UIManager.browserStorage());
         this.matchHistory = matchHistory || new MatchHistory(UIManager.browserStorage());
@@ -777,6 +956,7 @@ class UIManager {
         this.lastYearInput = document.getElementById('lastYearInput');
         this.repeatNote = document.getElementById('repeatNote');
         this.soundToggle = document.getElementById('soundToggle');
+        this.partyBtn = document.getElementById('partyBtn');
 
         // List chrome (optional elements)
         this.nameCount = document.getElementById('nameCount');
@@ -890,6 +1070,10 @@ class UIManager {
 
         if (this.clearListBtn) {
             this.clearListBtn.addEventListener('click', () => this.handleClearList());
+        }
+
+        if (this.partyBtn) {
+            this.partyBtn.addEventListener('click', () => this.partyReveal.open(this.lastAssignments));
         }
 
         if (this.soundToggle && this.sound) {
@@ -1262,6 +1446,7 @@ class UIManager {
     }
 
     displayResults(assignments) {
+        this.lastAssignments = assignments;
         this.resultsList.replaceChildren(...assignments.map((pair, i) => {
             const card = el('div', 'result-card');
             card.style.setProperty('--i', String(i));
@@ -1338,6 +1523,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         Person,
         GiftExchangeService,
+        PartyReveal,
         SoundService,
         EventDetails,
         MatchHistory,

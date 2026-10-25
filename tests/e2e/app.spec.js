@@ -124,4 +124,23 @@ test.describe('Gift Exchange App', () => {
         await page.reload();
         await expect(page.locator('#eventBanner')).toContainText('$50 limit');
     });
+
+    test('party reveal shows each match one at a time', async ({ page }) => {
+        await page.click('#toggleBulkBtn');
+        await page.fill('#bulkInput', 'Ann Frost [F1], Ben Frost [F2], Cal Pike [P]');
+        await page.click('#importBtn');
+        await page.click('#shuffleBtn');
+        await expect(page.locator('#loadingOverlay')).toBeHidden({ timeout: 10000 });
+
+        await page.click('#partyBtn');
+        await expect(page.locator('#partyOverlay')).toBeVisible();
+        await expect(page.locator('#partyProgress')).toHaveText('1 of 3');
+        await expect(page.locator('#partyReceiver')).toBeHidden();
+        await expect(page.locator('#partyReceiver')).toBeVisible({ timeout: 3000 }); // after the drumroll
+
+        await page.keyboard.press('ArrowRight');
+        await expect(page.locator('#partyProgress')).toHaveText('2 of 3');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#partyOverlay')).toBeHidden();
+    });
 });
