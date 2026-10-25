@@ -1274,6 +1274,208 @@ body[data-theme="hanukkah"] .burst {
     animation: pop 0.5s ease-out forwards !important;
 }
 
+/* --- Party reveal --------------------------------------------------------- */
+.party-btn {
+    width: 100%;
+    margin-top: 1.1rem;
+    padding: 1rem;
+    font-size: 1.1rem;
+    color: #2a0810;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    background: linear-gradient(160deg, #ffe39a, var(--gold) 55%, var(--gold-deep));
+    box-shadow: 0 10px 26px -12px rgba(245, 196, 90, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.party-btn span {
+    font-weight: 400;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.party-btn:hover {
+    transform: translateY(-2px) scale(1.01);
+}
+
+body.party-mode {
+    overflow: hidden;
+}
+
+.party-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start; /* top-anchored so revealing the name doesn't shift the layout */
+    gap: 1rem;
+    padding: max(2.5rem, 7vh) 1rem 1.5rem;
+    overflow-y: auto;
+    text-align: center;
+    background:
+        radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--sky-1) 85%, transparent) 0%, transparent 60%),
+        radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--sky-2) 70%, transparent) 0%, transparent 55%),
+        #060308; /* fully opaque: the results list must not show through on a big screen */
+    animation: fade-in 0.3s ease-out;
+}
+
+.party-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 1.1rem;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--field-edge);
+}
+
+.party-progress {
+    font-size: 0.85rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+
+.party-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: min(900px, 100%);
+}
+
+.party-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.party-giver {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: clamp(1.9rem, 5vw, 3.4rem);
+    color: var(--text);
+}
+
+.party-giving {
+    font-size: clamp(1rem, 2.2vw, 1.4rem);
+    color: var(--text-soft);
+    font-style: italic;
+}
+
+.party-stage {
+    position: relative;
+    width: min(38vh, 70vw);
+    height: min(38vh, 70vw);
+    margin: 0.75rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.party-gift {
+    position: absolute;
+    width: 100%;
+    height: auto;
+    filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.6));
+}
+
+.party-gift-closed {
+    animation: shake 0.45s cubic-bezier(.36, .07, .19, .97) infinite both;
+    transform-origin: 50% 85%;
+}
+
+.party-gift-open {
+    animation: open-pop 0.55s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+
+.party-receiver {
+    font-family: var(--font-script);
+    font-size: clamp(3rem, 9vw, 6.5rem);
+    line-height: 1.25;
+    padding: 0.1em 0.3em 0.2em;
+    color: var(--gold);
+    text-shadow: 0 0 30px rgba(245, 196, 90, 0.55), 0 4px 0 rgba(0, 0, 0, 0.35);
+    animation: receiver-pop 0.6s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+
+@keyframes receiver-pop {
+    from { opacity: 0; transform: scale(0.6) translateY(20px); }
+    to   { opacity: 1; transform: none; }
+}
+
+.party-wishlist {
+    font-size: clamp(1rem, 2.4vw, 1.4rem);
+    color: var(--text-soft);
+    animation: drop-in 0.5s 0.25s ease-out both;
+}
+
+.party-finale-title {
+    font-family: var(--font-script);
+    font-size: clamp(3rem, 10vw, 6rem);
+    color: var(--gold);
+    text-shadow: 0 0 30px rgba(245, 196, 90, 0.55);
+}
+
+.party-finale p:last-child {
+    font-size: 1.3rem;
+    color: var(--text-soft);
+}
+
+.party-controls {
+    margin-top: auto;
+    display: flex;
+    gap: 0.75rem;
+    width: min(460px, 100%);
+}
+
+.party-controls .secondary-btn {
+    margin-top: 0;
+    flex: 1;
+}
+
+.party-controls .primary-btn {
+    flex: 2;
+}
+
+.party-controls button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.party-confetti {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.confetti-piece {
+    position: absolute;
+    top: -20px;
+    left: var(--x);
+    width: 10px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--c);
+    opacity: 0;
+    animation: confetti-fall 2.8s cubic-bezier(.25, .6, .4, 1) var(--delay) forwards;
+}
+
+.confetti-piece:nth-child(3n) {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+@keyframes confetti-fall {
+    0%   { opacity: 1; transform: translate3d(0, 0, 0) rotate(0deg); }
+    85%  { opacity: 1; }
+    100% { opacity: 0; transform: translate3d(var(--drift), 105vh, 0) rotate(var(--spin)); }
+}
+
 /* --- Small screens --------------------------------------------------------- */
 @media (max-width: 520px) {
     body {
