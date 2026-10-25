@@ -7,11 +7,20 @@
 
 class Person {
     constructor(firstName, lastName, familyGroup, wishlist) {
+        const { surname, family } = Person.splitSurname(lastName);
         this.firstName = firstName.trim();
-        this.lastName = lastName.trim();
-        // Default familyGroup to lastName if not provided
-        this.familyGroup = (familyGroup && familyGroup.trim()) ? familyGroup.trim() : this.lastName;
+        this.lastName = surname;
+        // Default familyGroup to the surname — or to "Harlan 1" when entered as "Harlan 1".
+        this.familyGroup = (familyGroup && familyGroup.trim()) ? familyGroup.trim() : family;
         this.wishlist = wishlist ? wishlist.trim() : '';
+    }
+
+    // "Harlan 1" -> surname "Harlan", family "Harlan 1". A trailing number tells apart
+    // households that share a surname. Anything else is left as typed.
+    static splitSurname(lastName) {
+        const typed = String(lastName).trim().replace(/\s+/g, ' ');
+        const m = /^(.*\S)\s+(\d+)$/.exec(typed);
+        return m ? { surname: m[1], family: typed } : { surname: typed, family: typed };
     }
 
     getFullName() {
@@ -112,9 +121,10 @@ class GiftExchangeService {
     }
 
     isNameTaken(first, last) {
+        const surname = Person.splitSurname(last).surname.toLowerCase();
         return this.names.some(entry =>
             entry.firstName.toLowerCase() === first.trim().toLowerCase() &&
-            entry.lastName.toLowerCase() === last.trim().toLowerCase()
+            entry.lastName.toLowerCase() === surname
         );
     }
 
@@ -710,7 +720,9 @@ class UIManager {
 
             const parts = text.split(/\s+/);
             if (parts.length >= 2) {
-                const lastName = parts.pop();
+                // "Zac Harlan 1": the number belongs to the surname (it marks the family).
+                const takesNumber = parts.length >= 3 && /^\d+$/.test(parts[parts.length - 1]);
+                const lastName = parts.splice(takesNumber ? -2 : -1).join(' ');
                 const firstName = parts.join(' ');
 
                 try {
