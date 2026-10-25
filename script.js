@@ -399,6 +399,53 @@ class AnimationService {
     }
 }
 
+// --- Bulk import parsing ---
+
+// Turns pasted text into people. People are separated by commas or new lines.
+// Each person is "First [Middle] Last" with an optional [Family Group] and {Wishlist}.
+// A [group] or {wishlist} on its own (e.g. "Ann Frost, [Frost 1],") belongs to the
+// person just before it. A trailing number stays with the surname ("Zac Harlan 1").
+function parseBulkList(text) {
+    const people = [];
+    let last = null;
+    for (const raw of String(text).split(/[,\n\r]+/)) {
+        let segment = raw.trim();
+        if (!segment) continue;
+
+        let group = '';
+        const groupMatch = segment.match(/\[(.*?)\]/);
+        if (groupMatch) {
+            group = groupMatch[1].trim();
+            segment = segment.replace(groupMatch[0], ' ');
+        }
+        let wishlist = '';
+        const wishMatch = segment.match(/\{(.*?)\}/);
+        if (wishMatch) {
+            wishlist = wishMatch[1].trim();
+            segment = segment.replace(wishMatch[0], ' ');
+        }
+
+        const parts = segment.split(/\s+/).filter(Boolean);
+        if (parts.length === 0) {
+            // A stand-alone [group] / {wishlist} belongs to the previous person.
+            if (last) {
+                if (group && !last.group) last.group = group;
+                if (wishlist && !last.wishlist) last.wishlist = wishlist;
+            }
+            continue;
+        }
+        if (parts.length < 2) {
+            last = null; // not a full name, so a following [group] must not attach to someone else
+            continue;
+        }
+        const takesNumber = parts.length >= 3 && /^\d+$/.test(parts[parts.length - 1]);
+        const lastName = parts.splice(takesNumber ? -2 : -1).join(' ');
+        last = { firstName: parts.join(' '), lastName, group, wishlist };
+        people.push(last);
+    }
+    return people;
+}
+
 // Create an element with a class and (text-only) content.
 function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -698,42 +745,15 @@ class UIManager {
         const rawText = this.bulkInput.value.trim();
         if (!rawText) return;
 
-        const entries = rawText.split(',');
         let addedCount = 0;
-
-        entries.forEach(entry => {
-            let text = entry.trim();
-            if (!text) return;
-
-            let group = '';
-            const groupMatch = text.match(/\[(.*?)\]/);
-            if (groupMatch) {
-                group = groupMatch[1].trim();
-                text = text.replace(groupMatch[0], '').trim();
+        for (const entry of parseBulkList(rawText)) {
+            try {
+                this.exchangeService.addPerson(entry.firstName, entry.lastName, entry.group, entry.wishlist);
+                addedCount++;
+            } catch (_) {
+                // Duplicates are skipped silently in bulk import.
             }
-
-            let wishlist = '';
-            const wishlistMatch = text.match(/\{(.*?)\}/);
-            if (wishlistMatch) {
-                wishlist = wishlistMatch[1].trim();
-                text = text.replace(wishlistMatch[0], '').trim();
-            }
-
-            const parts = text.split(/\s+/);
-            if (parts.length >= 2) {
-                // "Zac Harlan 1": the number belongs to the surname (it marks the family).
-                const takesNumber = parts.length >= 3 && /^\d+$/.test(parts[parts.length - 1]);
-                const lastName = parts.splice(takesNumber ? -2 : -1).join(' ');
-                const firstName = parts.join(' ');
-
-                try {
-                    this.exchangeService.addPerson(firstName, lastName, group, wishlist);
-                    addedCount++;
-                } catch (e) {
-                    // Ignore duplicates in bulk or handle silently
-                }
-            }
-        });
+        }
 
         if (addedCount > 0) {
             this.saveParticipants();
@@ -926,6 +946,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         Person,
         GiftExchangeService,
+        parseBulkList,
         ParticipantStore,
         UIManager,
         AnimationService
