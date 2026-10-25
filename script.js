@@ -687,6 +687,7 @@ class UIManager {
             // If successful, play animation then show results
             this.animationService.play(theme, () => {
                 this.displayResults(assignments);
+                this.scrollToResults();
             });
         } catch (err) {
             this.showError(err.message);
@@ -871,6 +872,14 @@ class UIManager {
         this.resetBtn.classList.remove('hidden');
 
         this.setInputsDisabled(true);
+    }
+
+    // Land on the reveal right after the animation — no manual scrolling.
+    scrollToResults() {
+        if (typeof this.resultsSection.scrollIntoView !== 'function') return;
+        const reduce = typeof window.matchMedia === 'function' &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        this.resultsSection.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
     }
 
     resetView() {
