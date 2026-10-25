@@ -38,3 +38,18 @@ BLOCKED: Human approval needed for:
          4. untrack-node-modules-coverage — git rm -r --cached node_modules coverage (~7,300 files).
 
 APPROVAL 2026-10-25: Zac Harlan approved (in chat) adding .github/workflows/ci.yml. Committed with SECURITY-REVIEW trailer.
+
+--- 2026-10-25  claude-opus-5-5 / graphics, festive redesign, saved list ---
+DONE   : Blender pipeline art/ (gift closed+open, hero presents, dreidel 24-frame sprite, 9-branch menorah
+         10-frame lighting sprite, latkes, gelt) -> art/post.py -> assets/*.webp; festive restyle (both themes,
+         live theme switch); XSS fix + window global removed (baseline 4 -> 1); participant list saved to
+         localStorage (giftExchange.participants, versioned) with Clear list; CI workflow active (approved).
+TESTS  : unit+arch 52 -> 71 passing; e2e 5 -> 6 passing; guardrails 56/56; sweep exit 0.
+DECISIONS:
+         - Owner moved merge/gh-api denies from .claude/settings.json into .claude/settings.local.json;
+           sweep now warns (not fails) on missing merge deny. Guard hook still blocks merges.
+         - CSS steps(n, jump-none) yields n positions: sprites use steps(frames).
+NEXT   : feature_list.json -> bad-santa-game (priority 30): ask owner for rules, then draw numbers from
+         ParticipantStore.load(). Or inject-randomness (priority 22) to clear the last baseline entry.
+BLOCKED: .claude/settings.json, scripts/hooks/, harden-github.sh still uncommitted (need SECURITY-REVIEW by
+         owner). Branch protection intentionally NOT applied (owner's instruction).

@@ -67,4 +67,24 @@ test.describe('Gift Exchange App', () => {
         const listItems = page.locator('#nameList li');
         await expect(listItems).toHaveCount(2);
     });
+
+    test('should persist the participant list across reloads and clear it', async ({ page }) => {
+        await page.click('#toggleBulkBtn');
+        await page.fill('#bulkInput', 'Alice A [GroupA] {Books}, Bob B [GroupB]');
+        await page.click('#importBtn');
+        await expect(page.locator('#nameList li')).toHaveCount(2);
+
+        await page.reload();
+        await expect(page.locator('#nameList li')).toHaveCount(2);
+        await expect(page.locator('#nameCount')).toHaveText('2');
+        await expect(page.locator('#shuffleBtn')).toBeEnabled();
+
+        page.once('dialog', dialog => dialog.accept());
+        await page.click('#clearListBtn');
+        await expect(page.locator('#nameList li')).toHaveCount(0);
+
+        await page.reload();
+        await expect(page.locator('#nameList li')).toHaveCount(0);
+        await expect(page.locator('#emptyState')).toBeVisible();
+    });
 });

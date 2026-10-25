@@ -18,7 +18,8 @@ If `bash init.sh` fails, fixing it **is** the task.
 | Thing | Value |
 |---|---|
 | App | Static, single-page, vanilla JS — `index.html` + `script.js` + `style.css`. No build step, no backend, no database. |
-| Data | Browser only. `localStorage` keys `giftExchange.coreFamilies`, `giftExchange.theme`. Names/wishlists never leave the browser. |
+| Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`. Names/wishlists never leave the browser. |
+| Art | Blender 5.2 (Cycles) scene scripts in `art/` → `art/post.py` (Pillow) → `assets/*.webp`. Rebuild: `bash art/render.sh`. |
 | Runtime (dev) | Node ≥ 18 (developed on 26), npm 11 |
 | Dev server | `scripts/serve.js` (zero-dependency) → http://localhost:8085, `GET /health` → `{"status":"ok"}` |
 | Unit tests | Jest 30 + jsdom (`tests/unit/`, `tests/architecture/`) |
@@ -34,8 +35,9 @@ All app code is in `script.js`, in layers. Arrows = "may depend on".
                         │
    UIManager ───────────┼──▶ GiftExchangeService ──▶ Person
    (DOM, events,        │     (matching rules; pure JS,
-    localStorage,       │      no browser APIs)
-    clipboard, mailto)  │
+    theme, clipboard,   │      no browser APIs)
+    mailto)             │
+        ├──▶ ParticipantStore   (saves the list; storage injected)
         └──▶ AnimationService   (overlay animation only; knows nothing about people)
 ```
 
@@ -63,7 +65,9 @@ Wiring happens once at the bottom of `script.js` (`DOMContentLoaded`) — servic
 |---|---|
 | `index.html` | Markup; every element the JS touches has an `id`. |
 | `script.js` | All app logic: `Person`, `GiftExchangeService`, `AnimationService`, `UIManager`. |
-| `style.css` | All styling (dark glass theme, CSS custom properties in `:root`). |
+| `style.css` | All styling. Palettes are CSS custom properties per `body[data-theme="christmas|hanukkah"]`. |
+| `art/` | Blender scene scripts (`art/common.py` helpers, one file per scene), `art/post.py`, `art/render.sh`. |
+| `assets/` | Rendered WebP art and sprite sheets (generated — edit `art/`, then re-render). |
 | `scripts/serve.js` | Dev server + `/health`. Serves only the 3 app files. |
 | `init.sh` | Bootstrap / `--stop`. |
 | `agent-status.sh` | Orientation snapshot (always exits 0). |
@@ -96,6 +100,7 @@ No secrets exist in this project. There is no `.env` file.
 | Everything | `npm run test:all` |
 | Coverage report | `npm run test:coverage` (writes `coverage/`) |
 | Serve without init | `npm start` |
+| Re-render art | `bash art/render.sh` (or `bash art/render.sh gift menorah`) |
 | Stale baseline entries | `node tests/architecture/rules.js --stale` |
 | Guardrail self-test | `bash tests/guardrails/run.sh` |
 

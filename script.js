@@ -82,6 +82,35 @@ class GiftExchangeService {
         return [...this.names];
     }
 
+    clearPeople() {
+        this.names = [];
+    }
+
+    // Plain data for saving / sharing with other features (e.g. Bad Santa).
+    toRecords() {
+        return this.names.map(p => ({
+            firstName: p.firstName,
+            lastName: p.lastName,
+            familyGroup: p.familyGroup,
+            wishlist: p.wishlist
+        }));
+    }
+
+    // Adds valid, non-duplicate records; returns how many were added.
+    loadRecords(records) {
+        let added = 0;
+        for (const r of Array.isArray(records) ? records : []) {
+            if (!r || typeof r.firstName !== 'string' || typeof r.lastName !== 'string') continue;
+            if (!r.firstName.trim() || !r.lastName.trim()) continue;
+            if (this.isNameTaken(r.firstName, r.lastName)) continue;
+            const group = typeof r.familyGroup === 'string' ? r.familyGroup : '';
+            const wishlist = typeof r.wishlist === 'string' ? r.wishlist : '';
+            this.addPerson(r.firstName, r.lastName, group, wishlist);
+            added++;
+        }
+        return added;
+    }
+
     isNameTaken(first, last) {
         return this.names.some(entry =>
             entry.firstName.toLowerCase() === first.trim().toLowerCase() &&
@@ -182,6 +211,45 @@ class GiftExchangeService {
             giver: giver,
             receiver: receivers[i]
         }));
+    }
+}
+
+// --- Persistence ---
+
+// Saves the participant list so it survives reloads. Storage is injected
+// (window.localStorage in the app, a fake in tests); every call is failure-safe.
+class ParticipantStore {
+    static get KEY() {
+        return 'giftExchange.participants';
+    }
+
+    constructor(storage) {
+        this.storage = storage;
+    }
+
+    load() {
+        try {
+            const raw = this.storage && this.storage.getItem(ParticipantStore.KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return parsed && Array.isArray(parsed.participants) ? parsed.participants : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    save(records) {
+        try {
+            if (this.storage) {
+                this.storage.setItem(ParticipantStore.KEY, JSON.stringify({ version: 1, participants: records }));
+            }
+        } catch (_) { }
+    }
+
+    clear() {
+        try {
+            if (this.storage) this.storage.removeItem(ParticipantStore.KEY);
+        } catch (_) { }
     }
 }
 
@@ -330,9 +398,11 @@ function el(tag, className, text) {
 }
 
 class UIManager {
-    constructor(exchangeService, animationService) {
+    constructor(exchangeService, animationService, participantStore) {
         this.exchangeService = exchangeService;
         this.animationService = animationService;
+        this.participantStore = participantStore || new ParticipantStore(UIManager.browserStorage());
+        this.confirm = (message) => window.confirm(message);
 
         this.STORAGE_KEY_CORE_FAMILIES = 'giftExchange.coreFamilies';
         this.STORAGE_KEY_THEME = 'giftExchange.theme';
@@ -376,6 +446,35 @@ class UIManager {
         this.copyBtn = document.getElementById('copyBtn');
 
         this.initEventListeners();
+        this.restoreParticipants();
+        this.updateButtons();
+    }
+
+    static browserStorage() {
+        try {
+            return window.localStorage;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    restoreParticipants() {
+        this.exchangeService.loadRecords(this.participantStore.load());
+        this.renderList();
+    }
+
+    saveParticipants() {
+        this.participantStore.save(this.exchangeService.toRecords());
+    }
+
+    handleClearList() {
+        const count = this.exchangeService.getPeople().length;
+        if (count === 0) return;
+        if (!this.confirm(`Remove all ${count} people from the list?`)) return;
+        this.exchangeService.clearPeople();
+        this.participantStore.clear();
+        this.resetView();
+        this.renderList();
         this.updateButtons();
     }
 
@@ -442,6 +541,10 @@ class UIManager {
         }
         if (this.saveCoreFamiliesBtn) {
             this.saveCoreFamiliesBtn.addEventListener('click', () => this.handleSaveSettings());
+        }
+
+        if (this.clearListBtn) {
+            this.clearListBtn.addEventListener('click', () => this.handleClearList());
         }
 
         // Delete buttons (event delegation — no globals, no inline handlers)
@@ -540,6 +643,7 @@ class UIManager {
 
         try {
             this.exchangeService.addPerson(firstName, lastName, group, wishlist);
+            this.saveParticipants();
             this.firstNameInput.value = '';
             this.lastNameInput.value = '';
             this.groupInput.value = '';
@@ -555,6 +659,7 @@ class UIManager {
 
     handleRemoveName(index) {
         this.exchangeService.removePerson(index);
+        this.saveParticipants();
         this.renderList();
         this.updateButtons();
         if (!this.resultsSection.classList.contains('hidden')) {
@@ -618,6 +723,7 @@ class UIManager {
         });
 
         if (addedCount > 0) {
+            this.saveParticipants();
             this.bulkInput.value = '';
             this.bulkSection.classList.add('hidden');
             this.renderList();
@@ -799,6 +905,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         Person,
         GiftExchangeService,
+        ParticipantStore,
         UIManager,
         AnimationService
     };

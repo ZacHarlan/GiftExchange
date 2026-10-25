@@ -83,7 +83,7 @@
     "description": "The participant list (first, last, family group, wishlist) is saved to localStorage key giftExchange.participants on every add/remove/import and restored on load, so testing doesn't require re-typing and later features (Bad Santa) can reuse it. A 'Clear list' button empties it (with confirm). Persistence lives behind an injectable store so it stays testable.",
     "verification": "npx jest -t 'persist' && npm run test:e2e",
     "priority": 12,
-    "passes": false
+    "passes": true
   },
   {
     "id": "bad-santa-game",
