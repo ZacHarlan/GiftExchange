@@ -64,6 +64,36 @@
     "depends_on": [
       "e2e-tests-green"
     ],
+    "passes": true
+  },
+  {
+    "id": "festive-redesign",
+    "category": "visual",
+    "description": "Festive stylesheet: wine/evergreen night sky with bokeh + CSS snowfall, string of twinkling lights on the card, Blender hero art in the header, script title, gift-tag name list coloured per family, staggered gift-tag reveal of results. data-theme switches the whole page to a blue/silver/gold Hanukkah palette live from Settings. Mobile layout and prefers-reduced-motion supported.",
+    "verification": "grep -q 'data-theme=\"christmas\"' index.html && grep -q 'body\\[data-theme=\"hanukkah\"\\]' style.css && npx jest tests/unit/UIManager.test.js -t 'Theme' && npm run test:e2e",
+    "priority": 11,
+    "depends_on": [
+      "blender-rendered-graphics"
+    ],
+    "passes": true
+  },
+  {
+    "id": "persist-participants",
+    "category": "functional",
+    "description": "The participant list (first, last, family group, wishlist) is saved to localStorage key giftExchange.participants on every add/remove/import and restored on load, so testing doesn't require re-typing and later features (Bad Santa) can reuse it. A 'Clear list' button empties it (with confirm). Persistence lives behind an injectable store so it stays testable.",
+    "verification": "npx jest -t 'persist' && npm run test:e2e",
+    "priority": 12,
+    "passes": false
+  },
+  {
+    "id": "bad-santa-game",
+    "category": "functional",
+    "description": "Bad Santa (white-elephant) mode: draw a random turn order / numbers from the saved participant list (giftExchange.participants). Details TBD with the owner.",
+    "verification": "npx jest -t 'Bad Santa' && npm run test:e2e",
+    "priority": 30,
+    "depends_on": [
+      "persist-participants"
+    ],
     "passes": false
   },
   {
@@ -72,7 +102,7 @@
     "description": "renderList/displayResults build DOM with createElement + textContent so names/wishlists can't inject markup. Lower no-html-interpolation in baseline.json to 0 (delete the entry). Add a regression test: a name like <img src=x onerror=...> renders as text.",
     "verification": "node -e \"const v=require('./tests/architecture/rules.js').computeViolations(); process.exit(Object.keys(v['no-html-interpolation']).length ? 1 : 0)\" && npm test",
     "priority": 20,
-    "passes": false
+    "passes": true
   },
   {
     "id": "remove-window-globals",
@@ -80,7 +110,7 @@
     "description": "Replace window.removeName + inline onclick with a delegated click listener on #nameList. Remove no-window-globals from baseline.json.",
     "verification": "node -e \"const v=require('./tests/architecture/rules.js').computeViolations(); process.exit(Object.keys(v['no-window-globals']).length ? 1 : 0)\" && ! grep -q 'onclick=' script.js && npm test && npm run test:e2e",
     "priority": 21,
-    "passes": false
+    "passes": true
   },
   {
     "id": "inject-randomness",
@@ -93,7 +123,7 @@
   {
     "id": "architecture-baseline-zero",
     "category": "quality",
-    "description": "No baselined violations remain \u2014 every architecture rule passes outright.",
+    "description": "No baselined violations remain — every architecture rule passes outright.",
     "verification": "node -e \"const b=require('./tests/architecture/baseline.json'); process.exit(Object.keys(b).filter(k => !k.startsWith('_')).length ? 1 : 0)\"",
     "priority": 23,
     "depends_on": [

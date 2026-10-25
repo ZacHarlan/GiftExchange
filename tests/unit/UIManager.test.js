@@ -220,11 +220,60 @@ describe('UIManager + AnimationService (jsdom)', () => {
         jest.advanceTimersByTime(800 * 4 + 500);
         expect(document.getElementById('resultsSection').classList.contains('hidden')).toBe(false);
 
-        // remove via global function
-        expect(typeof window.removeName).toBe('function');
-        window.removeName(0);
+        // Delete buttons are disabled while results show; enable to simulate the click path.
+        const del = document.querySelector('#nameList .delete-btn');
+        del.disabled = false;
+        del.click();
 
+        expect(service.getPeople()).toHaveLength(1);
         expect(document.getElementById('resultsSection').classList.contains('hidden')).toBe(true);
+        expect(window.removeName).toBeUndefined();
+    });
+
+    test('Names and wishlists render as text, never as HTML (XSS regression)', () => {
+        const service = new GiftExchangeService();
+        const ui = new UIManager(service, new AnimationService());
+
+        service.addPerson('<img src=x onerror="window.pwned=1">', 'Evil', 'G1', '<b>bold</b>');
+        service.addPerson('Bob', 'B', 'G2');
+        ui.renderList();
+        const item = document.querySelector('#nameList li');
+        expect(item.querySelector('img')).toBeNull();
+        expect(item.textContent).toContain('<img src=x');
+        expect(item.querySelector('.wish-icon').getAttribute('title')).toBe('<b>bold</b>');
+
+        ui.displayResults(service.shuffleAndAssign());
+        expect(document.querySelector('#resultsList img')).toBeNull();
+        expect(document.querySelector('#resultsList b')).toBeNull();
+        expect(document.getElementById('resultsList').textContent).toContain('Wishlist: <b>bold</b>');
+        expect(window.pwned).toBeUndefined();
+    });
+
+    test('Delete button removes that person', () => {
+        const service = new GiftExchangeService();
+        const ui = new UIManager(service, new AnimationService());
+        service.addPerson('Alice', 'A');
+        service.addPerson('Bob', 'B');
+        ui.renderList();
+        document.querySelectorAll('#nameList .delete-btn')[0].click();
+        expect(service.getPeople().map(p => p.firstName)).toEqual(['Bob']);
+        expect(document.querySelectorAll('#nameList li')).toHaveLength(1);
+    });
+
+    test('Theme select applies the theme to the page immediately and remembers it', () => {
+        new UIManager(new GiftExchangeService(), new AnimationService());
+        const select = document.getElementById('themeSelect');
+        expect(document.body.dataset.theme).toBe('christmas');
+        select.value = 'hanukkah';
+        select.dispatchEvent(new Event('change'));
+        expect(document.body.dataset.theme).toBe('hanukkah');
+        expect(localStorage.getItem('giftExchange.theme')).toBe('hanukkah');
+    });
+
+    test('Saved theme is applied on load', () => {
+        localStorage.setItem('giftExchange.theme', 'hanukkah');
+        new UIManager(new GiftExchangeService(), new AnimationService());
+        expect(document.body.dataset.theme).toBe('hanukkah');
     });
 
     test('Copy: writes to clipboard and handles failure', async () => {

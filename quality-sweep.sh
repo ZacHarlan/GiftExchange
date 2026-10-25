@@ -138,8 +138,10 @@ done
 hdr "Action guardrails"
 # ---------------------------------------------------------------------------
 S=.claude/settings.json
+# Owner decision 2026-10-25 (Zac Harlan): PR-merge and gh-api permissions moved out of the shared
+# deny list into the owner's .claude/settings.local.json. Report the state; don't fail on it.
 jq -e '.permissions.deny | index("Bash(gh pr merge:*)")' "$S" >/dev/null 2>&1 \
-  && ok "$S denies PR merge" || fail "$S does not deny 'Bash(gh pr merge:*)'"
+  && ok "$S denies PR merge" || warn "$S does not deny PR merge (owner decision 2026-10-25; the guard hook still blocks it)"
 jq -e '.permissions.ask | index("Bash(git push *)")' "$S" >/dev/null 2>&1 \
   && ok "'git push' requires confirmation (survives auto mode)" || fail "No ask rule for 'Bash(git push *)'"
 [[ "$(jq -r '.permissions.disableBypassPermissionsMode // ""' "$S")" == "disable" ]] \
