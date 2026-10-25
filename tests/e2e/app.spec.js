@@ -101,4 +101,13 @@ test.describe('Gift Exchange App', () => {
         await expect(page.locator('#loadingOverlay')).toBeHidden({ timeout: 10000 });
         await expect(page.locator('#resultsSection h2')).toBeInViewport();
     });
+
+    test('should import one-per-line lists with ", [Family]," and keep the families', async ({ page }) => {
+        await page.click('#toggleBulkBtn');
+        await page.fill('#bulkInput', 'Ann Frost, [Frost 1],\nBen Frost, [Frost 1],\nCal Frost, [Frost 2],\nDee Frost, [Frost 2]');
+        await page.click('#importBtn');
+        await expect(page.locator('#nameList li')).toHaveCount(4);
+        await expect(page.locator('#nameList li', { hasText: 'Ann Frost' })).toContainText('[Frost 1]');
+        await expect(page.locator('#nameList li', { hasText: 'Cal Frost' })).toContainText('[Frost 2]');
+    });
 });
