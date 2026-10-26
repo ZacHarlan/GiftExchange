@@ -84,3 +84,10 @@ DECISIONS:
          - Worked in worktree ../GiftExchange-tour off origin/main (local main and the main checkout were stale).
 NEXT   : Owner asked for better hero art: bows look odd; ornaments should hang on a tree, not sit on the floor
          (art/hero scene -> bash art/render.sh). Separate branch.
+--- 2026-10-26  claude-opus-5-5 / hero tree + new bows (feat/hero-tree) ---
+DONE   : Hero redesigned: decorated tree with lights and star, five presents; ornaments now hang on the tree.
+         Bows rebuilt (loops + tails) in gift.py, so gift.webp / gift-open.webp change too. post.py pads the
+         hero to exactly 1000x475 (matches index.html) and adds bloom to the lights. Previous session's art
+         helper was killed mid-edit (exit 137); this session checked post.py, re-rendered, verified.
+TESTS  : unit+arch 150/150. Sweep: only the worktree git-hook false alarm (fixed on feat/guided-tour).
+NEXT   : owner approved; merged main (tour, PR #13) in, then PR + merge. Use the ZacHarlan gh account (GH_TOKEN=$(gh auth token -u ZacHarlan)); the active work account is read-only here.

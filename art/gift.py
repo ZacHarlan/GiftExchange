@@ -58,43 +58,56 @@ def satin(name="Ribbon", color=(1.0, 0.68, 0.18)):
     return m
 
 
-def bow(z, mat):
-    """Two puffy loops, a knot, and two notched tails."""
+def bow(z, mat, loop_yaw=0.0, lid_half=0.79, tail_dir=-90.0):
+    """Classic satin bow sitting on a lid whose top is at height `z`.
+
+    Two flat ribbon loops pinched into a wrapped centre knot, plus two V-notched tails that run
+    across the lid and drape over its edge. `loop_yaw` turns the loops (degrees) so they face the
+    camera; `tail_dir` is the direction (degrees, 0 = +X) the tails run toward an edge `lid_half` away.
+    """
+    import math as _m
+    from mathutils import Matrix
+    W = 0.2  # same width as the bands round the box
     parts = []
+    yaw = Matrix.Rotation(deg(loop_yaw), 3, "Z")
+    gather = lambda t: 0.32 + 0.68 * _m.sin(_m.pi * t) ** 0.7  # pinched where it meets the knot
+
+    def place(pts, R):
+        return [tuple(yaw @ (R @ Vector(p)) + Vector((0, 0, z))) for p in pts]
+
     for side in (1, -1):
-        loop = curve_tube(
-            "Loop",
-            [(0, 0, z), (side * 0.30, 0.22, z + 0.50), (side * 0.72, 0.05, z + 0.38),
-             (side * 0.55, -0.16, z + 0.08), (0, 0, z)],
-            bevel_depth=0.0, resolution=32)
-        # Flat ribbon cross-section: bevel a flat rectangle via extrude + bevel.
-        loop.data.extrude = 0.16
-        loop.data.bevel_depth = 0.03
-        parts.append(loop)
-        tail = curve_tube(
-            "Tail",
-            [(0, 0, z + 0.02), (side * 0.18, -0.38, z + 0.01), (side * 0.30, -0.80, z - 0.02), (side * 0.36, -0.86, z - 0.30)],
-            bevel_depth=0.0, resolution=24)
-        tail.data.extrude = 0.0
-        tail.data.bevel_depth = 0.0
-        tail.data.offset = 0.0
-        # Flat ribbon: sweep a wide flat profile along the tail path.
-        prof = bpy.data.curves.new("TailProfile", "CURVE")
-        ps = prof.splines.new("POLY")
-        ps.points.add(1)
-        ps.points[0].co = (-0.085, 0, 0, 1)
-        ps.points[1].co = (0.085, 0, 0, 1)
-        prof_obj = bpy.data.objects.new("TailProfile", prof)
-        bpy.context.collection.objects.link(prof_obj)
-        tail.data.bevel_mode = "OBJECT"
-        tail.data.bevel_object = prof_obj
-        sol = tail.modifiers.new("Thick", "SOLIDIFY")
-        sol.thickness = 0.012
-        parts.append(tail)
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.13, location=(0, 0, z + 0.06), segments=48, ring_count=24)
-    knot = bpy.context.object
-    knot.scale = (1.15, 0.9, 0.8)
-    smooth(knot)
+        # Loop drawn in the XZ plane: out and up from the knot, round the end, back underneath.
+        loop_pts = [(0.02, 0, 0.08), (0.16, 0, 0.30), (0.40, 0, 0.46), (0.64, 0, 0.42), (0.74, 0, 0.24),
+                    (0.62, 0, 0.08), (0.34, 0, 0.03), (0.04, 0, 0.06)]
+        loop_pts = [(side * x, y, zz) for x, y, zz in loop_pts]
+        # Lean the loops back a little and splay them into a shallow V seen from above.
+        R = Matrix.Rotation(deg(side * 14), 3, "Z") @ Matrix.Rotation(deg(26), 3, "X")
+        hint_w = yaw @ R @ Vector((0, 1, 0))
+        parts.append(ribbon_strip("BowLoop", place(loop_pts, R), W * 1.55, lambda t, p, T, h=hint_w: h,
+                                  scale_fn=gather, cup_fn=lambda t: 0.10 + 0.25 * (1 - _m.sin(_m.pi * t)),
+                                  thickness=0.014, rows=140))
+
+    # Tails: tucked under the knot, across the lid, over the edge, V-notched ends.
+    td = Matrix.Rotation(deg(tail_dir + 90), 3, "Z")  # local -Y -> tail_dir
+    e = lid_half + 0.02
+    for side in (1, -1):
+        tail_pts = [(side * 0.03, 0.05, 0.03), (side * 0.10, -0.12, 0.022), (side * 0.22, -0.40, 0.016),
+                    (side * 0.30, -(e - 0.14), 0.013),
+                    (side * 0.33, -e + 0.03, 0.006), (side * 0.345, -e - 0.005, -0.06),
+                    (side * 0.35, -e - 0.01, -0.22)]
+        pts = [tuple(td @ Vector(p) + Vector((0, 0, z))) for p in tail_pts]
+        up = Vector((0, 0, 1))
+        parts.append(ribbon_strip("BowTail", pts, W * 0.95,
+                                  lambda t, p, T: up.cross(T) if abs(T.z) < 0.97 else Vector((1, 0, 0)),
+                                  scale_fn=lambda t: 0.75 + 0.25 * min(1, t * 4),
+                                  cup_fn=lambda t: 0.03, notch=0.07, thickness=0.012, rows=110))
+
+    # Knot: a short piece of ribbon wrapped round the gathered loops.
+    ring = [(0, 0.10 * _m.cos(a), 0.095 + 0.085 * _m.sin(a))
+            for a in [deg(-90 + 360 * i / 12) for i in range(12)]]
+    knot = ribbon_strip("BowKnot", place(ring, Matrix.Identity(3)), W * 0.9,
+                        lambda t, p, T: yaw @ Vector((1, 0, 0)),
+                        cup_fn=lambda t: -0.12, thickness=0.014, rows=80, closed=True)
     parts.append(knot)
     for p in parts:
         p.data.materials.append(mat)
@@ -139,7 +152,7 @@ def build(open_lid=False):
         assign(lband, ribbon)
         lid_objs.append(lband)
 
-    lid_objs += bow(lid_z + lid_h / 2, ribbon)
+    lid_objs += bow(lid_z + lid_h / 2, ribbon, loop_yaw=38)
 
     if open_lid:
         # Hollow the box: drop the top face, give the walls thickness, line the inside with gold foil.

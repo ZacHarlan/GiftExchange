@@ -131,11 +131,21 @@ def main():
     if exists("hero.png"):
         im = load("hero.png")
         x0, y0, x1, y1 = content_box([im])
-        pad = int((x1 - x0) * 0.09)
-        im = im.crop((max(0, x0 - pad), max(0, y0 - pad), min(im.width, x1 + pad), min(im.height, y1 + pad)))
+        pad = int((x1 - x0) * 0.06)
+        x0, y0, x1, y1 = x0 - pad, y0 - pad, x1 + pad, y1 + pad
+        # Grow the box to the header's fixed 1000x475 aspect (index.html declares that size).
+        w, h = 1000, 475
+        if (x1 - x0) / (y1 - y0) < w / h:
+            grow = (y1 - y0) * w / h - (x1 - x0)
+            x0, x1 = x0 - grow / 2, x1 + grow / 2
+        else:
+            grow = (x1 - x0) * h / w - (y1 - y0)
+            y0, y1 = y0 - grow / 2, y1 + grow / 2
+        canvas = Image.new("RGBA", (int(x1 - x0), int(y1 - y0)), (0, 0, 0, 0))
+        canvas.paste(im, (int(-x0), int(-y0)))
+        im = bloom(canvas, threshold=235, radius=max(4, canvas.width // 180), strength=0.8)
         im = edge_fade(im, inner=0.93)
-        w = 1000
-        im = im.resize((w, int(im.height * w / im.width)), Image.LANCZOS)
+        im = im.resize((w, h), Image.LANCZOS)
         im.save(os.path.join(ASSETS, "hero.webp"), "WEBP", quality=86, method=6)
         print(f"[post] hero.webp  {im.width}x{im.height}  {os.path.getsize(os.path.join(ASSETS, 'hero.webp')) // 1024} KB")
 

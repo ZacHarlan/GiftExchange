@@ -38,7 +38,8 @@ def setup_render(res=640, samples=128):
     for d in prefs.devices:
         d.use = d.type == "METAL"
     s.cycles.device = "GPU"
-    s.cycles.samples = samples
+    # ART_SAMPLES / ART_SCALE let you iterate quickly: ART_SAMPLES=32 ART_SCALE=50 bash art/render.sh hero
+    s.cycles.samples = int(os.environ.get("ART_SAMPLES", samples))
     s.cycles.use_denoising = True
     s.cycles.max_bounces = 12
     s.cycles.glossy_bounces = 6
@@ -46,7 +47,7 @@ def setup_render(res=640, samples=128):
     s.render.film_transparent = True
     s.render.resolution_x = res
     s.render.resolution_y = res
-    s.render.resolution_percentage = 100
+    s.render.resolution_percentage = int(os.environ.get("ART_SCALE", 100))
     s.render.image_settings.file_format = "PNG"
     s.render.image_settings.color_mode = "RGBA"
     s.render.image_settings.color_depth = "8"
@@ -221,6 +222,103 @@ def curve_tube(name, points, bevel_depth, resolution=24, closed=False):
     spline.use_cyclic_u = closed
     o = bpy.data.objects.new(name, cd)
     bpy.context.collection.objects.link(o)
+    return o
+
+
+def spline_points(points, per_segment=16, closed=False):
+    """Catmull-Rom curve through `points` -> dense list of Vectors."""
+    P = [Vector(p) for p in points]
+    if closed:
+        ext = [P[-1]] + P + [P[0], P[1]]
+        segs = len(P)
+    else:
+        ext = [P[0] + (P[0] - P[1])] + P + [P[-1] + (P[-1] - P[-2])]
+        segs = len(P) - 1
+    out = []
+    for i in range(segs):
+        p0, p1, p2, p3 = ext[i], ext[i + 1], ext[i + 2], ext[i + 3]
+        for k in range(per_segment):
+            t = k / per_segment
+            out.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t
+                              + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3))
+    out.append(ext[-2] if not closed else P[0].copy())
+    return out
+
+
+class _Polyline:
+    """Arc-length parametrised polyline: pos(s), tangent(s)."""
+
+    def __init__(self, pts):
+        self.pts = pts
+        self.cum = [0.0]
+        for a, b in zip(pts, pts[1:]):
+            self.cum.append(self.cum[-1] + (b - a).length)
+        self.length = self.cum[-1]
+
+    def _seg(self, s):
+        s = max(0.0, min(self.length, s))
+        lo, hi = 0, len(self.cum) - 1
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            if self.cum[mid] <= s:
+                lo = mid
+            else:
+                hi = mid
+        seg = self.cum[hi] - self.cum[lo]
+        return lo, hi, (s - self.cum[lo]) / seg if seg else 0.0
+
+    def pos(self, s):
+        lo, hi, f = self._seg(s)
+        return self.pts[lo].lerp(self.pts[hi], f)
+
+    def tangent(self, s):
+        d = max(self.length / 400, 1e-4)
+        return (self.pos(s + d) - self.pos(s - d)).normalized()
+
+
+def ribbon_strip(name, points, width, width_hint, scale_fn=None, cup_fn=None, notch=0.0,
+                 thickness=0.012, rows=120, cols=9, closed=False):
+    """A flat ribbon (satin/paper strip) swept along a smooth curve through `points`.
+
+    width_hint(t, pos, tangent) -> Vector: which way the ribbon's width points (orthogonalised
+    against the tangent); scale_fn(t) narrows the ribbon (gathered ends); cup_fn(t) bows the
+    cross-section; notch > 0 cuts a V into the far end (classic ribbon tail).
+    """
+    import bmesh
+    line = _Polyline(spline_points(points, 24, closed))
+    L = line.length
+    bm = bmesh.new()
+    grid = []
+    for c in range(cols):
+        u = -1 + 2 * c / (cols - 1)
+        Lu = L - notch * (1 - abs(u))
+        col = []
+        for r in range(rows + 1):
+            s = Lu * r / rows
+            t = s / L
+            p, T = line.pos(s), line.tangent(s)
+            W = Vector(width_hint(t, p, T))
+            W = (W - W.dot(T) * T).normalized()
+            N = T.cross(W)
+            sc = scale_fn(t) if scale_fn else 1.0
+            cup = cup_fn(t) if cup_fn else 0.0
+            v = p + W * (u * width / 2 * sc) + N * (cup * width * sc * (u * u - 0.35))
+            col.append(bm.verts.new(v))
+        grid.append(col)
+    for c in range(cols - 1):
+        for r in range(rows):
+            bm.faces.new((grid[c][r], grid[c][r + 1], grid[c + 1][r + 1], grid[c + 1][r]))
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(o)
+    if thickness:
+        sol = o.modifiers.new("Thick", "SOLIDIFY")
+        sol.thickness = thickness
+        sol.offset = 0
+    for poly in o.data.polygons:
+        poly.use_smooth = True
     return o
 
 
