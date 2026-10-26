@@ -914,7 +914,7 @@ const TOUR_STEPS = [
     {
         target: '#groupInput',
         title: 'Keep families apart',
-        text: 'People in the same family group never draw each other. Leave it blank and the last name is used. Two households with the same surname? Use “Harlan 1” and “Harlan 2”.'
+        text: 'People in the same family group never draw each other. Leave it blank and the last name is used. Two households with the same surname? Use “Smith 1” and “Smith 2”.'
     },
     {
         target: '#toggleBulkBtn',
