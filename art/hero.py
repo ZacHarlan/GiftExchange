@@ -272,5 +272,6 @@ place(closed_gift(*ivory, loop_yaw=30), (3.75, -1.1, 0), -30, (0.58, 0.58, 0.62)
 
 shadow_catcher(size=30)
 studio(target=(0, 0, 1.6), scale=1.4)
-camera((0.2, -12.5, 3.2), (0, 0, 2.3), lens=38)
+# Wide enough that the star's top point stays inside the frame (post.py crops to content).
+camera((0.2, -12.5, 3.2), (0, 0, 2.5), lens=34)
 render(os.path.join(OUT, "hero.png"))
