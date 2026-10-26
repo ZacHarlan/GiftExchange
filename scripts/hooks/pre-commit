@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# pre-commit — local gate. Installed by `bash init.sh` (symlink in .git/hooks/).
+# Keep it fast (<5s). Sensitive-path approval lives in commit-msg, not here:
+# pre-commit runs before the commit message exists.
+
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+EXIT=0
+fail() { printf "\033[1;31m[pre-commit]\033[0m %s\n" "$*" >&2; EXIT=1; }
+
+staged() { git diff --cached --name-only --diff-filter=ACM; }
+
+# 1. No commits directly on main. GitHub Pages publishes main, so main = production.
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+if [[ "$branch" =~ ^(main|master|gh-pages|release/.*)$ ]]; then
+  fail "Refusing to commit directly on '$branch' (GitHub Pages deploys it)."
+  echo "  → git switch -c feat/<slug>   # then commit, push the branch, open a PR" >&2
+fi
+
+# 2. Debug artifacts in staged JS (console.error/warn are fine; console.log/debugger are not).
+while IFS= read -r f; do
+  case "$f" in
+    *.js)
+      [[ "$f" == node_modules/* || "$f" == coverage/* ]] && continue
+      if git show ":$f" 2>/dev/null | grep -nE '(console\.log|\bdebugger\b)' >/dev/null; then
+        fail "Debug artifact (console.log/debugger) in staged file: $f"
+      fi
+      ;;
+  esac
+done < <(staged)
+
+# 3. Obvious secrets. Keep in sync with quality-sweep.sh.
+SECRET_RE='(AKIA[0-9A-Z]{16}'
+SECRET_RE+='|xox[baprs]-[A-Za-z0-9-]{10,}'
+SECRET_RE+='|gh[pousr]_[A-Za-z0-9]{36,}'
+SECRET_RE+='|github_pat_[A-Za-z0-9_]{22,}'
+SECRET_RE+='|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+SECRET_RE+='|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}'
+SECRET_RE+='|sk-[A-Za-z0-9]{32,}'
+SECRET_RE+='|sk-ant-[A-Za-z0-9_-]{20,})'
+while IFS= read -r f; do
+  [[ "$f" == node_modules/* || "$f" == coverage/* ]] && continue
+  hits=$(git show ":$f" 2>/dev/null | grep -nE "$SECRET_RE" | grep -v 'pragma: allowlist-secret' || true)
+  if [[ -n "$hits" ]]; then
+    fail "Possible secret in staged file: $f"
+    echo "$hits" | head -5 | sed 's/^/      /' >&2
+  fi
+done < <(staged)
+
+# 4. Valid JSON.
+if command -v jq >/dev/null 2>&1; then
+  while IFS= read -r f; do
+    case "$f" in
+      node_modules/*|coverage/*) ;;
+      *.json) git show ":$f" | jq empty >/dev/null 2>&1 || fail "Invalid JSON: $f" ;;
+    esac
+  done < <(staged)
+fi
+
+# 5. Unit + architecture tests (~1s). E2E runs in CI / `npm run test:e2e`.
+if ! out="$(npx --no-install jest --silent 2>&1)"; then
+  fail "Unit/architecture tests failing:"
+  printf '%s\n' "$out" | grep -E '●|FAIL|Why:|Fix:|Tests:' | head -20 | sed 's/^/      /' >&2
+  echo "      → npm test" >&2
+fi
+
+if (( EXIT != 0 )); then
+  echo >&2
+  echo "Pre-commit checks failed. Fix the issues above (do NOT use --no-verify)." >&2
+fi
+exit "$EXIT"
