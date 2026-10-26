@@ -71,3 +71,11 @@ NEXT   : inject-randomness (priority 22) clears the last architecture baseline e
          the guard regexes to cut false positives.
 BLOCKED: .claude/settings.json, scripts/hooks/, harden-github.sh uncommitted (need owner SECURITY-REVIEW).
          Branch protection intentionally off (owner). node_modules/coverage still tracked (owner OK needed).
+
+--- 2026-10-26  claude-opus-5-5 / hero tree + new bows (feat/hero-tree) ---
+DONE   : Hero redesigned: decorated tree with lights and star, five presents; ornaments now hang on the tree.
+         Bows rebuilt (loops + tails) in gift.py, so gift.webp / gift-open.webp change too. post.py pads the
+         hero to exactly 1000x475 (matches index.html) and adds bloom to the lights. Previous session's art
+         helper was killed mid-edit (exit 137); this session checked post.py, re-rendered, verified.
+TESTS  : unit+arch 150/150. Sweep: only the worktree git-hook false alarm (fixed on feat/guided-tour).
+NEXT   : owner to look at the art; then push + PR. feat/guided-tour PR still unopened (gh not a collaborator).
