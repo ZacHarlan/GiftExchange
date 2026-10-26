@@ -250,5 +250,13 @@
     "verification": "npx jest tests/unit/bad-santa-toggle.test.js && npx playwright test tests/e2e/bad-santa.spec.js",
     "priority": 32,
     "passes": true
+  },
+  {
+    "id": "background-music",
+    "category": "functional",
+    "description": "Softer sound effects and background music. SoundService routes every effect through one bus (master -> soft room reverb -> low-pass -> compressor) with gentler, C-major bell voicings. MusicService loops assets/music-christmas.mp3 quietly (volume <= 0.3, fades in/out), starting on the first click or key press because browsers block autoplay; the 🎵 button turns it off and on (giftExchange.music). scripts/serve.js serves assets/*.mp3.",
+    "verification": "npx jest tests/unit/music.test.js tests/unit/sound.test.js tests/unit/serve.test.js && npx playwright test tests/e2e/music.spec.js",
+    "priority": 33,
+    "passes": true
   }
 ]

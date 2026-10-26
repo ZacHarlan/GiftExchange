@@ -9,6 +9,7 @@ A simple web application to randomly assign gift exchange partners while respect
 - **Bulk Import**: Paste a list of names to quickly add multiple people
 - **Fun Animation**: Enjoy a festive animation when shuffling assignments
 - **Copy Results**: Easily copy the final assignments to share with participants
+- **Music & Sound**: Soft background music after your first click, and gentle bells during the shuffle. The 🎵 and 🔔 buttons (top right) turn each off
 - **Guided Tour**: New here? Click **How it works** (top left) for a one-minute walkthrough of the app
 - **Bad Santa** (optional): A white elephant game mode. Turn it on in **Settings → Show Bad Santa**; it's hidden until you do
 

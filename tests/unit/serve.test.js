@@ -58,6 +58,12 @@ describe('dev server (scripts/serve.js)', () => {
         expect(res.type).toBe('image/webp');
     });
 
+    test('serves background music from assets/ as audio/mpeg', async () => {
+        const res = await get(port, '/assets/music-christmas.mp3');
+        expect(res.status).toBe(200);
+        expect(res.type).toBe('audio/mpeg');
+    });
+
     test.each(['/assets/../package.json', '/assets/nope.png', '/assets/sub/x.webp', '/art/post.py'])(
         'refuses non-asset path %s',
         async urlPath => {

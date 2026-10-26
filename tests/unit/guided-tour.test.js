@@ -157,7 +157,7 @@ describe('GuidedTour', () => {
     test('the built-in tour covers every main part of the app', () => {
         const targets = TOUR_STEPS.map(s => s.target).filter(Boolean);
         for (const id of ['.input-group', '#groupInput', '#toggleBulkBtn', '#toggleSettingsBtn',
-            '.list-section', '#shuffleBtn', '#resultsSection', '#modeSwitch', '#soundToggle']) {
+            '.list-section', '#shuffleBtn', '#resultsSection', '#modeSwitch', '.audio-controls']) {
             expect(targets).toContain(id);
         }
         expect(TOUR_STEPS[0].target).toBeUndefined(); // starts with a centered welcome

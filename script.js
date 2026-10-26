@@ -339,6 +339,7 @@ class SoundService {
         this.createContext = createContext || SoundService.browserContext;
         this.enabled = true;
         this.ctx = undefined;
+        this.master = null;
     }
 
     static browserContext() {
@@ -368,6 +369,57 @@ class SoundService {
         return this.ctx;
     }
 
+    // One shared mix bus: every effect -> master -> (soft room reverb) -> gentle
+    // low-pass -> compressor -> speakers. Keeps effects warm and never harsh or loud.
+    bus() {
+        if (this.master) return this.master;
+        const ctx = this.ctx;
+        let out = ctx.destination;
+        if (ctx.createDynamicsCompressor) {
+            const comp = ctx.createDynamicsCompressor();
+            const set = (param, v) => { if (param) param.value = v; };
+            set(comp.threshold, -20);
+            set(comp.knee, 14);
+            set(comp.ratio, 3);
+            set(comp.attack, 0.004);
+            set(comp.release, 0.25);
+            comp.connect(ctx.destination);
+            out = comp;
+        }
+        const warm = ctx.createBiquadFilter();
+        warm.type = 'lowpass';
+        warm.frequency.value = 6500;
+        warm.Q.value = 0.5;
+        warm.connect(out);
+
+        const master = ctx.createGain();
+        master.gain.value = 0.9;
+        master.connect(warm);
+        if (ctx.createConvolver) {
+            const room = ctx.createConvolver();
+            room.buffer = this.roomImpulse(1.8);
+            const send = ctx.createGain();
+            send.gain.value = 0.22;
+            master.connect(send);
+            send.connect(room);
+            room.connect(warm);
+        }
+        this.master = master;
+        return master;
+    }
+
+    // A decaying stereo noise tail: a small, soft room.
+    roomImpulse(seconds) {
+        const ctx = this.ctx;
+        const length = Math.max(1, Math.floor(ctx.sampleRate * seconds));
+        const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+            const data = buffer.getChannelData(ch);
+            for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3);
+        }
+        return buffer;
+    }
+
     play(name) {
         if (!this.enabled) return;
         const effect = SoundService.EFFECTS[name];
@@ -375,12 +427,13 @@ class SoundService {
         const ctx = this.context();
         if (!ctx) return;
         try {
+            this.bus();
             effect(this, ctx.currentTime);
         } catch (_) { }
     }
 
-    // A single enveloped oscillator note.
-    tone(t, { freq, endFreq, dur = 0.3, type = 'sine', gain = 0.15, attack = 0.005 }) {
+    // A single enveloped oscillator note with a soft attack.
+    tone(t, { freq, endFreq, dur = 0.3, type = 'sine', gain = 0.1, attack = 0.012 }) {
         const ctx = this.ctx;
         const osc = ctx.createOscillator();
         const amp = ctx.createGain();
@@ -390,13 +443,19 @@ class SoundService {
         amp.gain.setValueAtTime(0.0001, t);
         amp.gain.linearRampToValueAtTime(gain, t + attack);
         amp.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        osc.connect(amp).connect(ctx.destination);
+        osc.connect(amp).connect(this.bus());
         osc.start(t);
         osc.stop(t + dur + 0.05);
     }
 
-    // Filtered white noise: shakers, sizzle, whoosh, drums.
-    noise(t, { dur = 0.2, gain = 0.15, type = 'bandpass', freq = 4000, endFreq, q = 1, attack = 0.005 }) {
+    // A soft glockenspiel / music-box bell: a few sine partials, the higher ones fading faster.
+    bell(t, freq, { gain = 0.06, dur = 1.6 } = {}) {
+        [[1, 1, 1], [2, 0.3, 0.55], [3, 0.12, 0.35], [4.2, 0.05, 0.22]].forEach(([ratio, level, life]) =>
+            this.tone(t, { freq: freq * ratio, dur: dur * life, gain: gain * level, attack: 0.006 }));
+    }
+
+    // Filtered white noise: bells' shimmer, sizzle, air, brushes.
+    noise(t, { dur = 0.2, gain = 0.05, type = 'bandpass', freq = 4000, endFreq, q = 1, attack = 0.01 }) {
         const ctx = this.ctx;
         const length = Math.max(1, Math.floor(ctx.sampleRate * dur));
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
@@ -413,60 +472,150 @@ class SoundService {
         amp.gain.setValueAtTime(0.0001, t);
         amp.gain.linearRampToValueAtTime(gain, t + attack);
         amp.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        src.connect(filter).connect(amp).connect(ctx.destination);
+        src.connect(filter).connect(amp).connect(this.bus());
         src.start(t);
         src.stop(t + dur + 0.05);
     }
 
     static get EFFECTS() {
+        // Notes (Hz) from C major, so every effect sits nicely over the background music.
+        const C5 = 523.25, E5 = 659.25, G5 = 783.99, C6 = 1046.5, D6 = 1174.66, E6 = 1318.51, G6 = 1567.98, C7 = 2093;
         return {
-            // Sleigh bells: jingly shaker hits with bright bell tones.
+            // Sleigh bells: a light shimmer under a rising glockenspiel arpeggio.
             jingle: (s, t) => {
-                const bells = [2093, 2637, 3136, 2349];
-                for (let i = 0; i < 10; i++) {
-                    const at = t + i * 0.11 + (i % 2) * 0.03;
-                    s.noise(at, { dur: 0.09, gain: 0.07, type: 'highpass', freq: 7000 });
-                    s.tone(at, { freq: bells[i % bells.length], dur: 0.18, type: 'triangle', gain: 0.045 });
+                for (let i = 0; i < 8; i++) {
+                    s.noise(t + i * 0.12 + (i % 2) * 0.03, { dur: 0.08, gain: 0.018, freq: 6500, q: 1.6 });
                 }
+                [G5, C6, E6, G6].forEach((f, i) => s.bell(t + 0.05 + i * 0.15, f, { gain: 0.05, dur: 1.4 }));
             },
-            // Spinning dreidel: a rising and falling breath of air.
+            // Spinning dreidel: a soft breath of air.
             whoosh: (s, t) => {
-                s.noise(t, { dur: 0.7, gain: 0.12, freq: 350, endFreq: 2200, q: 2, attack: 0.2 });
+                s.noise(t, { dur: 0.8, gain: 0.05, freq: 300, endFreq: 1200, q: 0.8, attack: 0.25 });
             },
-            // Bell chime: a few partials with a long ring.
+            // A warm two-note bell.
             chime: (s, t) => {
-                [[880, 0.12], [1318.5, 0.08], [1760, 0.06], [2637, 0.03]].forEach(([f, g], i) =>
-                    s.tone(t + i * 0.015, { freq: f, dur: 1.4, gain: g }));
+                s.bell(t, G5, { gain: 0.06, dur: 2.2 });
+                s.bell(t + 0.12, D6, { gain: 0.035, dur: 2.0 });
             },
-            // Latkes in the pan.
+            // Latkes in the pan: a quiet, low sizzle.
             sizzle: (s, t) => {
-                s.noise(t, { dur: 0.9, gain: 0.07, type: 'highpass', freq: 3000, attack: 0.08 });
-                for (let i = 0; i < 6; i++) s.noise(t + 0.1 + i * 0.12, { dur: 0.03, gain: 0.05, type: 'highpass', freq: 5000 });
+                s.noise(t, { dur: 0.9, gain: 0.02, type: 'highpass', freq: 2500, attack: 0.15 });
+                for (let i = 0; i < 5; i++) s.noise(t + 0.12 + i * 0.14, { dur: 0.03, gain: 0.012, freq: 4000, q: 2 });
             },
-            // Gelt clinking.
+            // Gelt clinking: three small, rising bells.
             coins: (s, t) => {
-                [0, 0.13, 0.27].forEach((d, i) => {
-                    s.tone(t + d, { freq: 2400 + i * 300, dur: 0.15, type: 'triangle', gain: 0.07 });
-                    s.tone(t + d, { freq: 3600 + i * 300, dur: 0.1, type: 'sine', gain: 0.04 });
-                });
+                [C7, 2349.32, 2637.02].forEach((f, i) => s.bell(t + i * 0.11, f, { gain: 0.03, dur: 0.4 }));
             },
-            // Little fanfare for the reveal.
+            // The reveal: a soft major chord that swells in, with a sparkle on top.
             tada: (s, t) => {
-                s.tone(t, { freq: 523.25, dur: 0.12, type: 'triangle', gain: 0.1 });
-                [523.25, 659.25, 783.99, 1046.5].forEach(f =>
-                    s.tone(t + 0.13, { freq: f, dur: 1.0, type: 'triangle', gain: 0.07, attack: 0.02 }));
-                s.noise(t + 0.13, { dur: 0.4, gain: 0.05, type: 'highpass', freq: 6000 });
+                [C5, E5, G5].forEach(f => s.tone(t, { freq: f, dur: 1.5, gain: 0.04, attack: 0.08 }));
+                [C6, E6, G6, C7].forEach((f, i) => s.bell(t + 0.08 + i * 0.07, f, { gain: 0.03, dur: 1.2 }));
             },
+            // A gentle wooden tap for button clicks.
             tick: (s, t) => {
-                s.tone(t, { freq: 1250, dur: 0.06, gain: 0.05 });
+                s.tone(t, { freq: 880, dur: 0.07, gain: 0.05, attack: 0.003 });
             },
-            // Snare roll that swells (used before each party-mode reveal).
+            // Brushes on a snare, swelling softly (before each party-mode reveal).
             drumroll: (s, t) => {
                 for (let i = 0; i < 26; i++) {
-                    s.noise(t + i * 0.045, { dur: 0.05, gain: 0.03 + i * 0.004, freq: 1800, q: 0.7 });
+                    s.noise(t + i * 0.045, { dur: 0.06, gain: 0.012 + i * 0.0016, freq: 900, q: 0.6 });
                 }
             },
         };
+    }
+}
+
+// Quiet looping background music (an <audio> element, created on first use).
+// Browsers only allow playback after the visitor clicks or presses a key, so
+// UIManager calls start() then. Fades in and out instead of cutting.
+class MusicService {
+    static get VOLUME() {
+        return 0.16;
+    }
+
+    static get TRACKS() {
+        // One calm track suits both themes; give Hanukkah its own file here to switch per theme.
+        return { christmas: 'assets/music-christmas.mp3', hanukkah: 'assets/music-christmas.mp3' };
+    }
+
+    constructor(createAudio, tracks) {
+        this.createAudio = createAudio || MusicService.browserAudio;
+        this.tracks = tracks || MusicService.TRACKS;
+        this.enabled = true;
+        this.started = false;
+        this.theme = 'christmas';
+        this.audio = null;
+        this.src = null;
+        this.fades = new Map();
+    }
+
+    static browserAudio(src) {
+        return typeof Audio === 'function' ? new Audio(src) : null;
+    }
+
+    isEnabled() {
+        return this.enabled;
+    }
+
+    setEnabled(on) {
+        this.enabled = Boolean(on);
+        if (!this.enabled) this.fadeOut(this.audio);
+        else if (this.started) this.play();
+    }
+
+    start() {
+        this.started = true;
+        if (this.enabled) this.play();
+    }
+
+    setTheme(theme) {
+        this.theme = theme === 'hanukkah' ? 'hanukkah' : 'christmas';
+        if (!this.audio || this.src === this.tracks[this.theme]) return;
+        this.fadeOut(this.audio);
+        this.audio = null;
+        if (this.started && this.enabled) this.play();
+    }
+
+    play() {
+        const src = this.tracks[this.theme];
+        if (!this.audio) {
+            try {
+                this.audio = this.createAudio(src) || null;
+            } catch (_) {
+                this.audio = null;
+            }
+            if (!this.audio) return;
+            this.src = src;
+            this.audio.loop = true;
+            this.audio.preload = 'auto';
+            this.audio.volume = 0.01;
+        }
+        try {
+            const p = this.audio.play();
+            if (p && typeof p.catch === 'function') p.catch(() => { });
+        } catch (_) { }
+        this.fade(this.audio, MusicService.VOLUME, 3000);
+    }
+
+    fadeOut(audio) {
+        if (audio) this.fade(audio, 0, 1200, () => audio.pause());
+    }
+
+    fade(audio, to, ms, done) {
+        clearInterval(this.fades.get(audio));
+        const from = audio.volume;
+        const steps = Math.max(1, Math.round(ms / 100));
+        let i = 0;
+        const id = setInterval(() => {
+            i++;
+            audio.volume = Math.min(1, Math.max(0, from + (to - from) * (i / steps)));
+            if (i >= steps) {
+                clearInterval(id);
+                this.fades.delete(audio);
+                if (done) done();
+            }
+        }, 100);
+        this.fades.set(audio, id);
     }
 }
 
@@ -947,9 +1096,9 @@ const TOUR_STEPS = [
         text: 'Turn on “Show Bad Santa” in Settings and a switch appears here. In Bad Santa everyone draws a number, then opens a gift or steals one. The app keeps track of turns and steals.'
     },
     {
-        target: '#soundToggle',
-        title: 'Sound',
-        text: 'Bells and drumrolls play during the shuffle. Tap the bell to mute them.'
+        target: '.audio-controls',
+        title: 'Music & sound',
+        text: 'Soft holiday music plays in the background, and gentle bells chime during the shuffle. Tap 🎵 to turn the music off, or the bell to mute the sound effects.'
     },
     {
         title: 'You’re all set! 🎁',
@@ -1123,8 +1272,9 @@ function el(tag, className, text) {
 }
 
 class UIManager {
-    constructor(exchangeService, animationService, participantStore, matchHistory, soundService, partyReveal, guidedTour) {
+    constructor(exchangeService, animationService, participantStore, matchHistory, soundService, partyReveal, guidedTour, musicService) {
         this.exchangeService = exchangeService;
+        this.music = musicService || null;
         this.tour = guidedTour || new GuidedTour(TOUR_STEPS);
         this.sound = soundService || null;
         this.partyReveal = partyReveal || new PartyReveal(this.sound);
@@ -1143,6 +1293,7 @@ class UIManager {
         this.STORAGE_KEY_SOUND = 'giftExchange.sound';
         this.STORAGE_KEY_TOUR_SEEN = 'giftExchange.tourSeen';
         this.STORAGE_KEY_SHOW_BAD_SANTA = 'giftExchange.showBadSanta';
+        this.STORAGE_KEY_MUSIC = 'giftExchange.music';
         this.now = () => new Date();
 
         // Elements
@@ -1178,6 +1329,7 @@ class UIManager {
         this.lastYearInput = document.getElementById('lastYearInput');
         this.repeatNote = document.getElementById('repeatNote');
         this.soundToggle = document.getElementById('soundToggle');
+        this.musicToggle = document.getElementById('musicToggle');
         this.partyBtn = document.getElementById('partyBtn');
         this.printBtn = document.getElementById('printBtn');
         this.printSheet = document.getElementById('printSheet');
@@ -1196,6 +1348,7 @@ class UIManager {
 
         this.initEventListeners();
         this.initTour();
+        this.initMusic();
         this.restoreParticipants();
         this.updateButtons();
     }
@@ -1383,6 +1536,7 @@ class UIManager {
 
     applyTheme(theme) {
         document.body.dataset.theme = theme === 'hanukkah' ? 'hanukkah' : 'christmas';
+        if (this.music) this.music.setTheme(document.body.dataset.theme);
     }
 
     initSettings() {
@@ -1455,6 +1609,46 @@ class UIManager {
             const back = document.querySelector('#modeSwitch [data-mode="secret-santa"]');
             if (back) back.click();
         }
+    }
+
+    // Background music: remembered on/off, follows the theme, and starts on the first
+    // click or key press (browsers block autoplay). A first click on the music button
+    // itself is a request to turn it off, so it doesn't start the music.
+    initMusic() {
+        if (!this.music) return;
+        let saved = null;
+        try { saved = localStorage.getItem(this.STORAGE_KEY_MUSIC); } catch (_) { }
+        this.music.setEnabled(saved !== 'off');
+        this.music.setTheme(document.body.dataset.theme === 'hanukkah' ? 'hanukkah' : 'christmas');
+        this.renderMusicToggle();
+
+        const events = ['pointerdown', 'keydown'];
+        const firstInteraction = (e) => {
+            if (this.musicToggle && e.target && typeof e.target.closest === 'function' && e.target.closest('#musicToggle')) return;
+            events.forEach(name => document.removeEventListener(name, firstInteraction, true));
+            this.music.start();
+        };
+        events.forEach(name => document.addEventListener(name, firstInteraction, true));
+
+        if (this.musicToggle) {
+            this.musicToggle.addEventListener('click', () => {
+                const on = !this.music.isEnabled();
+                this.music.setEnabled(on);
+                if (on) this.music.start();
+                try {
+                    localStorage.setItem(this.STORAGE_KEY_MUSIC, on ? 'on' : 'off');
+                } catch (_) { }
+                this.renderMusicToggle();
+            });
+        }
+    }
+
+    renderMusicToggle() {
+        if (!this.musicToggle || !this.music) return;
+        const on = this.music.isEnabled();
+        this.musicToggle.setAttribute('aria-pressed', String(on));
+        this.musicToggle.setAttribute('aria-label', on ? 'Music on — click to turn it off' : 'Music off — click to turn it on');
+        this.musicToggle.classList.toggle('muted', !on);
     }
 
     renderSoundToggle() {
@@ -1827,7 +2021,7 @@ if (typeof document !== 'undefined') {
         const exchangeService = new GiftExchangeService();
         const sound = new SoundService();
         const animationService = new AnimationService(sound);
-        new UIManager(exchangeService, animationService, undefined, undefined, sound);
+        new UIManager(exchangeService, animationService, undefined, undefined, sound, undefined, undefined, new MusicService());
     });
 }
 
@@ -1837,6 +2031,7 @@ if (typeof module !== 'undefined' && module.exports) {
         Person,
         GiftExchangeService,
         PartyReveal,
+        MusicService,
         GuidedTour,
         TOUR_STEPS,
         SoundService,
