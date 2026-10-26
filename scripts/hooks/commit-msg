@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# commit-msg — enforces the SECURITY-REVIEW approval token.
+#
+# WHY THIS IS A SEPARATE HOOK FROM pre-commit:
+# A pre-commit hook runs BEFORE the commit message exists. The old version of
+# this check lived in pre-commit and read the message with:
+#
+#     msg="$(git log -1 --pretty=%B)"     # <-- the PREVIOUS commit's message
+#
+# That is the wrong commit. It made the gate both unsatisfiable (you could never
+# approve the commit you were actually making) and trivially defeated (one
+# approved commit unlocked every commit after it). The message is only available
+# to commit-msg, which receives its path as $1.
+#
+# Install:
+#   ln -sf ../../scripts/hooks/commit-msg .git/hooks/commit-msg
+#   chmod +x scripts/hooks/commit-msg
+
+set -uo pipefail
+
+MSG_FILE="$1"
+msg=$(cat "$MSG_FILE")
+
+SENSITIVE_PATTERNS=(
+  '^\.github/workflows/'
+  '^\.github/CODEOWNERS$'
+  '^\.gitlab-ci\.yml$'
+  '^\.circleci/'
+  '^azure-pipelines\.yml$'
+  '^Dockerfile'
+  '^docker-compose.*\.ya?ml$'
+  '^infra/'
+  '^deploy/'
+  '^terraform/'
+  '^pulumi/'
+  '^cdk/'
+  '^CODEOWNERS$'
+  '^\.pre-commit-config\.ya?ml$'
+  '^\.husky/'
+  '^\.claude/settings\.json$'
+  '^scripts/hooks/'
+  '^harden-github\.sh$'
+  '^CNAME$'
+)
+
+hits=""
+while IFS= read -r f; do
+  for pat in "${SENSITIVE_PATTERNS[@]}"; do
+    if [[ "$f" =~ $pat ]]; then
+      hits+="  $f"$'\n'
+      break
+    fi
+  done
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+[[ -z "$hits" ]] && exit 0
+
+# Require the token AND a named approver — a bare "SECURITY-REVIEW:" is not approval.
+if [[ ! "$msg" =~ SECURITY-REVIEW:[[:space:]]*[A-Za-z0-9][A-Za-z0-9._@/-]+ ]]; then
+  cat >&2 <<EOF
+[commit-msg] BLOCKED — sensitive paths changed without a recorded approver.
+
+Files:
+$hits
+These paths control CI, deployment, infrastructure, or the agent guardrails
+themselves. A change here affects every teammate on their next pull.
+
+To proceed:
+  1. Have a human actually review the diff above.
+  2. Record it in claude-progress.txt with their name and the date.
+  3. Add this trailer to the commit message:
+
+       SECURITY-REVIEW: <approver-name-or-ticket>
+
+If you are an AI agent: do not add this token yourself. It asserts that a human
+reviewed the change. Adding it without that review is a false attestation —
+stop and ask instead.
+EOF
+  exit 1
+fi
+
+approver=$(printf '%s' "$msg" | grep -oE 'SECURITY-REVIEW:[[:space:]]*[^[:space:]]+' | head -1)
+printf '[commit-msg] Sensitive-path change approved (%s)\n' "$approver"
+exit 0
