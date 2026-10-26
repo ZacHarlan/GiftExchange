@@ -15,12 +15,13 @@ const MIME = {
     '.css': 'text/css; charset=utf-8',
     '.svg': 'image/svg+xml',
     '.webp': 'image/webp',
+    '.mp3': 'audio/mpeg',
     '.png': 'image/png',
     '.ico': 'image/x-icon',
 };
 // Only app files are servable — never tests, configs, art sources, or node_modules.
 const SERVABLE = new Set(['index.html', 'script.js', 'bad-santa.js', 'style.css']);
-const ASSET = /^assets\/[a-z0-9-]+\.webp$/;
+const ASSET = /^assets\/[a-z0-9-]+\.(webp|mp3)$/;
 
 function resolveRequest(urlPath) {
     const clean = decodeURIComponent(urlPath.split('?')[0]);

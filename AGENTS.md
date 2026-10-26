@@ -18,7 +18,7 @@ If `bash init.sh` fails, fixing it **is** the task.
 | Thing | Value |
 |---|---|
 | App | Static, single-page, vanilla JS — `index.html` + `script.js` + `style.css`. No build step, no backend, no database. |
-| Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`, `giftExchange.badSanta` (saved Bad Santa game), `giftExchange.showBadSanta` (`'true'` shows Bad Santa; hidden by default), `giftExchange.tourSeen` (`'1'` once the guided tour was finished, skipped or declined). Names/wishlists never leave the browser. |
+| Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`, `giftExchange.badSanta` (saved Bad Santa game), `giftExchange.showBadSanta` (`'true'` shows Bad Santa; hidden by default), `giftExchange.tourSeen` (`'1'` once the guided tour was finished, skipped or declined), `giftExchange.music` (`'off'` turns background music off). Names/wishlists never leave the browser. |
 | Art | Blender 5.2 (Cycles) scene scripts in `art/` → `art/post.py` (Pillow) → `assets/*.webp`. Rebuild: `bash art/render.sh`. |
 | Runtime (dev) | Node ≥ 18 (developed on 26), npm 11 |
 | Dev server | `scripts/serve.js` (zero-dependency) → http://localhost:8085, `GET /health` → `{"status":"ok"}` |
@@ -68,8 +68,8 @@ Wiring happens once at the bottom of `script.js` (`DOMContentLoaded`) — servic
 | `bad-santa.js` | Bad Santa (white elephant) mode: `BadSantaGame` (pure engine), `BadSantaStore` (`giftExchange.badSanta`), `BadSantaUI`. Loaded after `script.js`. |
 | `style.css` | All styling. Palettes are CSS custom properties per `body[data-theme="christmas|hanukkah"]`. |
 | `art/` | Blender scene scripts (`art/common.py` helpers, one file per scene), `art/post.py`, `art/render.sh`. |
-| `assets/` | Rendered WebP art and sprite sheets (generated — edit `art/`, then re-render). |
-| `scripts/serve.js` | Dev server + `/health`. Serves only the 3 app files. |
+| `assets/` | Rendered WebP art and sprite sheets (generated — edit `art/`, then re-render), plus `music-christmas.mp3` (background music, Pixabay licence; used for both themes). |
+| `scripts/serve.js` | Dev server + `/health`. Serves only the app files plus `assets/*.webp` and `assets/*.mp3`. |
 | `init.sh` | Bootstrap / `--stop`. |
 | `agent-status.sh` | Orientation snapshot (always exits 0). |
 | `quality-sweep.sh` | Drift detector (non-zero on findings). |

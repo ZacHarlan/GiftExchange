@@ -91,3 +91,18 @@ DONE   : Hero redesigned: decorated tree with lights and star, five presents; or
          helper was killed mid-edit (exit 137); this session checked post.py, re-rendered, verified.
 TESTS  : unit+arch 150/150. Sweep: only the worktree git-hook false alarm (fixed on feat/guided-tour).
 NEXT   : owner approved; merged main (tour, PR #13) in, then PR + merge. Use the ZacHarlan gh account (GH_TOKEN=$(gh auth token -u ZacHarlan)); the active work account is read-only here.
+
+--- 2026-10-26  claude-opus-5-5 / softer sound + background music (feat/audio) ---
+DONE   : Owner asked for more pleasant effects + the music they downloaded (Pixabay "calm christmas music -
+         guitar, piano and bells", ~3 min loop) -> assets/music-christmas.mp3. SoundService now mixes through
+         one bus (reverb send, 6.5 kHz low-pass, compressor) with softer bell voicings; measured in an
+         OfflineAudioContext every effect is quieter than before (jingle -8 dB, sizzle -10 dB). MusicService
+         loops the track at volume 0.16 with fades; starts on first pointerdown/keydown; 🎵 toggle
+         (giftExchange.music). serve.js serves assets/*.mp3. Tour's sound step now covers music.
+         Finished the previous (crashed) session's tests/unit/music.test.js; UIManager's music arg is 8th
+         because guidedTour took 7th.
+TESTS  : unit+arch 171 -> 185; e2e 14 -> 15. Fixed a timing race in the tour e2e (measured mid-transition).
+DECISIONS:
+         - One track for both themes (only one was downloaded). MusicService.TRACKS can map Hanukkah to its own.
+         - Old dev server on 8088 (from the crashed session) predates the serve.js change; used 8089.
+NEXT   : owner listens locally, then PR + merge (use GH_TOKEN=$(gh auth token -u ZacHarlan)).
