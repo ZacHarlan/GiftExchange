@@ -16,6 +16,18 @@ test.describe('Guided tour', () => {
         await expect(page.locator('#tourSpotlight')).toBeVisible();
 
         // The spotlight sits around the name inputs, and the card doesn't cover them.
+        // Wait for the smooth scroll and the slide-in transitions to finish first.
+        const boxes = async () => JSON.stringify([
+            await page.locator('#tourSpotlight').boundingBox(),
+            await page.locator('#tourCard').boundingBox(),
+        ]);
+        let last = '';
+        await expect.poll(async () => {
+            const now = await boxes();
+            const settled = now === last;
+            last = now;
+            return settled;
+        }, { intervals: [150] }).toBe(true);
         const spot = await page.locator('#tourSpotlight').boundingBox();
         const inputs = await page.locator('.input-group').boundingBox();
         const card = await page.locator('#tourCard').boundingBox();
