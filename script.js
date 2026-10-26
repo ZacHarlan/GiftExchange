@@ -897,6 +897,223 @@ class PartyReveal {
     }
 }
 
+// --- Guided tour ---
+
+// The walkthrough shown by "How it works". A step without a target (or whose target
+// is hidden right now) is shown as a centered card.
+const TOUR_STEPS = [
+    {
+        title: 'Welcome! 🎄',
+        text: 'This quick tour shows you how to run your gift exchange. It takes about a minute. Use Next and Back, or the arrow keys.'
+    },
+    {
+        target: '.input-group',
+        title: 'Add everyone',
+        text: 'Type a first and last name, then press + (or Enter). Family group and wishlist are optional.'
+    },
+    {
+        target: '#groupInput',
+        title: 'Keep families apart',
+        text: 'People in the same family group never draw each other. Leave it blank and the last name is used. Two households with the same surname? Use “Smith 1” and “Smith 2”.'
+    },
+    {
+        target: '#toggleBulkBtn',
+        title: 'Got a long list?',
+        text: 'Bulk import lets you paste everyone at once, one per line or separated by commas. Add [Family] or {wishlist} after a name.'
+    },
+    {
+        target: '#toggleSettingsBtn',
+        title: 'Settings',
+        text: 'Pick a Christmas or Hanukkah theme, set a budget and exchange date (a countdown appears at the top), and avoid repeating last year’s matches.'
+    },
+    {
+        target: '.list-section',
+        title: 'Your list',
+        text: 'Everyone you add appears here as a gift tag, coloured by family. Remove someone with ✕. The list is saved in this browser only, so names never leave your device.'
+    },
+    {
+        target: '#shuffleBtn',
+        title: 'Shuffle & assign',
+        text: 'With at least two people on the list, press this. Everyone gets someone to buy for, never themselves or their own family.'
+    },
+    {
+        target: '#resultsSection',
+        title: 'Share the results',
+        text: 'After the shuffle you can reveal matches one at a time on the TV (Party reveal), print gift tags, email or copy the list, or reshuffle.'
+    },
+    {
+        target: '#modeSwitch',
+        title: 'Playing white elephant?',
+        text: 'Turn on “Show Bad Santa” in Settings and a switch appears here. In Bad Santa everyone draws a number, then opens a gift or steals one. The app keeps track of turns and steals.'
+    },
+    {
+        target: '#soundToggle',
+        title: 'Sound',
+        text: 'Bells and drumrolls play during the shuffle. Tap the bell to mute them.'
+    },
+    {
+        title: 'You’re all set! 🎁',
+        text: 'Start by adding the first name. You can replay this tour any time with “How it works” at the top of the page.'
+    }
+];
+
+// Spotlight walkthrough: dims the page, highlights one element per step and shows a
+// card with Back / Next / Skip. Knows nothing about people; UIManager owns "seen" state.
+class GuidedTour {
+    static get PAD() {
+        return 8; // space between the target and the spotlight edge
+    }
+
+    constructor(steps) {
+        this.steps = Array.isArray(steps) ? steps : TOUR_STEPS;
+        this.index = 0;
+        this.onClose = null;
+        this.returnFocus = null;
+        const $ = (id) => document.getElementById(id);
+        this.overlay = $('tourOverlay');
+        if (!this.overlay) return;
+        this.spotlight = $('tourSpotlight');
+        this.card = $('tourCard');
+        this.progress = $('tourProgress');
+        this.title = $('tourTitle');
+        this.text = $('tourText');
+        this.prevBtn = $('tourPrev');
+        this.nextBtn = $('tourNext');
+        this.skipBtn = $('tourSkip');
+
+        this.nextBtn.addEventListener('click', () => this.next());
+        this.prevBtn.addEventListener('click', () => this.prev());
+        this.skipBtn.addEventListener('click', () => this.close());
+        document.addEventListener('keydown', (e) => this.onKey(e));
+        const reposition = () => {
+            if (this.isOpen()) this.place();
+        };
+        window.addEventListener('resize', reposition);
+        window.addEventListener('scroll', reposition, { passive: true });
+    }
+
+    isOpen() {
+        return Boolean(this.overlay) && !this.overlay.classList.contains('hidden');
+    }
+
+    start() {
+        if (!this.overlay || this.steps.length === 0) return;
+        this.returnFocus = document.activeElement;
+        this.overlay.classList.remove('hidden');
+        document.body.classList.add('tour-open');
+        this.show(0);
+    }
+
+    close() {
+        if (!this.isOpen()) return;
+        const completed = this.index === this.steps.length - 1;
+        this.overlay.classList.add('hidden');
+        document.body.classList.remove('tour-open');
+        if (this.returnFocus && typeof this.returnFocus.focus === 'function') this.returnFocus.focus();
+        if (this.onClose) this.onClose({ completed });
+    }
+
+    next() {
+        if (!this.isOpen()) return;
+        if (this.index < this.steps.length - 1) this.show(this.index + 1);
+        else this.close();
+    }
+
+    prev() {
+        if (this.isOpen() && this.index > 0) this.show(this.index - 1);
+    }
+
+    onKey(e) {
+        if (!this.isOpen()) return;
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            this.next();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            this.prev();
+        } else if (e.key === 'Escape') {
+            this.close();
+        } else if (e.key === 'Tab') {
+            this.trapFocus(e);
+        }
+    }
+
+    // Keep keyboard focus on the card's buttons while the page behind is dimmed.
+    trapFocus(e) {
+        const buttons = [this.skipBtn, this.prevBtn, this.nextBtn].filter(b => !b.disabled);
+        const at = buttons.indexOf(document.activeElement);
+        const step = e.shiftKey ? -1 : 1;
+        e.preventDefault();
+        buttons[(at + step + buttons.length) % buttons.length].focus();
+    }
+
+    show(i) {
+        this.index = i;
+        const step = this.steps[i];
+        this.progress.textContent = `${i + 1} of ${this.steps.length}`;
+        this.title.textContent = step.title;
+        this.text.textContent = step.text;
+        this.prevBtn.disabled = i === 0;
+        this.nextBtn.textContent = i === this.steps.length - 1 ? 'Let’s go!' : 'Next';
+
+        const target = this.targetFor(step);
+        if (target && typeof target.scrollIntoView === 'function') {
+            const reduce = typeof window.matchMedia === 'function' &&
+                window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            target.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+        }
+        this.place();
+        this.nextBtn.focus();
+    }
+
+    // The step's element, if it is on the page and visible right now.
+    targetFor(step) {
+        if (!step.target) return null;
+        const node = document.querySelector(step.target);
+        if (!node) return null;
+        const r = node.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 ? node : null;
+    }
+
+    place() {
+        const target = this.targetFor(this.steps[this.index]);
+        this.overlay.classList.toggle('tour-centered', !target);
+        this.spotlight.classList.toggle('hidden', !target);
+        if (!target) {
+            this.card.style.top = '';
+            this.card.style.left = '';
+            return;
+        }
+
+        const pad = GuidedTour.PAD;
+        const r = target.getBoundingClientRect();
+        Object.assign(this.spotlight.style, {
+            top: `${r.top - pad}px`,
+            left: `${r.left - pad}px`,
+            width: `${r.width + pad * 2}px`,
+            height: `${r.height + pad * 2}px`
+        });
+
+        // Card goes below the spotlight if it fits, else above, else pinned to the bottom.
+        const gap = 14;
+        const margin = 12;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const cardW = this.card.offsetWidth;
+        const cardH = this.card.offsetHeight;
+        const below = r.bottom + pad + gap;
+        const above = r.top - pad - gap - cardH;
+        let top;
+        if (below + cardH <= vh - margin) top = below;
+        else if (above >= margin) top = above;
+        else top = vh - cardH - margin;
+        const centre = r.left + r.width / 2 - cardW / 2;
+        const left = Math.min(Math.max(centre, margin), Math.max(margin, vw - cardW - margin));
+        this.card.style.top = `${Math.max(margin, top)}px`;
+        this.card.style.left = `${left}px`;
+    }
+}
+
 // Create an element with a class and (text-only) content.
 function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -906,8 +1123,9 @@ function el(tag, className, text) {
 }
 
 class UIManager {
-    constructor(exchangeService, animationService, participantStore, matchHistory, soundService, partyReveal) {
+    constructor(exchangeService, animationService, participantStore, matchHistory, soundService, partyReveal, guidedTour) {
         this.exchangeService = exchangeService;
+        this.tour = guidedTour || new GuidedTour(TOUR_STEPS);
         this.sound = soundService || null;
         this.partyReveal = partyReveal || new PartyReveal(this.sound);
         this.print = () => window.print();
@@ -923,6 +1141,8 @@ class UIManager {
         this.STORAGE_KEY_DATE = 'giftExchange.date';
         this.STORAGE_KEY_AVOID_REPEATS = 'giftExchange.avoidRepeats';
         this.STORAGE_KEY_SOUND = 'giftExchange.sound';
+        this.STORAGE_KEY_TOUR_SEEN = 'giftExchange.tourSeen';
+        this.STORAGE_KEY_SHOW_BAD_SANTA = 'giftExchange.showBadSanta';
         this.now = () => new Date();
 
         // Elements
@@ -954,6 +1174,7 @@ class UIManager {
         this.exchangeDateInput = document.getElementById('exchangeDateInput');
         this.eventBanner = document.getElementById('eventBanner');
         this.avoidRepeatsToggle = document.getElementById('avoidRepeatsToggle');
+        this.showBadSantaToggle = document.getElementById('showBadSantaToggle');
         this.lastYearInput = document.getElementById('lastYearInput');
         this.repeatNote = document.getElementById('repeatNote');
         this.soundToggle = document.getElementById('soundToggle');
@@ -974,8 +1195,46 @@ class UIManager {
         this.copyBtn = document.getElementById('copyBtn');
 
         this.initEventListeners();
+        this.initTour();
         this.restoreParticipants();
         this.updateButtons();
+    }
+
+    // "How it works" walkthrough. First-time visitors get an invite (never an
+    // uninvited pop-up); finishing, skipping or declining it hides the invite for good.
+    initTour() {
+        this.tourBtn = document.getElementById('tourBtn');
+        this.tourInvite = document.getElementById('tourInvite');
+        const inviteStart = document.getElementById('tourInviteStart');
+        const inviteDismiss = document.getElementById('tourInviteDismiss');
+
+        this.tour.onClose = () => this.markTourSeen();
+        if (this.tourBtn) this.tourBtn.addEventListener('click', () => this.startTour());
+        if (inviteStart) inviteStart.addEventListener('click', () => this.startTour());
+        if (inviteDismiss) inviteDismiss.addEventListener('click', () => this.markTourSeen());
+
+        let seen = false;
+        try {
+            seen = localStorage.getItem(this.STORAGE_KEY_TOUR_SEEN) === '1';
+        } catch (_) { }
+        if (this.tourInvite) this.tourInvite.classList.toggle('hidden', seen);
+    }
+
+    startTour() {
+        // The tour walks through Secret Santa, so leave Bad Santa mode first.
+        if (document.body.dataset.mode === 'bad-santa') {
+            const back = document.querySelector('#modeSwitch [data-mode="secret-santa"]');
+            if (back) back.click();
+        }
+        if (this.tourInvite) this.tourInvite.classList.add('hidden');
+        this.tour.start();
+    }
+
+    markTourSeen() {
+        if (this.tourInvite) this.tourInvite.classList.add('hidden');
+        try {
+            localStorage.setItem(this.STORAGE_KEY_TOUR_SEEN, '1');
+        } catch (_) { }
     }
 
     static browserStorage() {
@@ -1100,6 +1359,17 @@ class UIManager {
             if (btn && !btn.disabled) this.handleRemoveName(Number(btn.dataset.index));
         });
 
+        // Show/hide Bad Santa applies (and saves) as soon as it's flipped
+        if (this.showBadSantaToggle) {
+            this.showBadSantaToggle.addEventListener('change', () => {
+                const show = this.showBadSantaToggle.checked;
+                this.applyBadSantaVisibility(show);
+                try {
+                    localStorage.setItem(this.STORAGE_KEY_SHOW_BAD_SANTA, show ? 'true' : 'false');
+                } catch (_) { }
+            });
+        }
+
         // Theme applies as soon as it's picked
         if (this.themeSelect) {
             this.themeSelect.addEventListener('change', () => {
@@ -1159,6 +1429,12 @@ class UIManager {
         }
         this.renderSoundToggle();
 
+        // Bad Santa is opt-in: hidden unless turned on in Settings.
+        let showBadSanta = false;
+        try { showBadSanta = localStorage.getItem(this.STORAGE_KEY_SHOW_BAD_SANTA) === 'true'; } catch (_) { }
+        if (this.showBadSantaToggle) this.showBadSantaToggle.checked = showBadSanta;
+        this.applyBadSantaVisibility(showBadSanta);
+
         // Last year's matches
         if (this.avoidRepeatsToggle) {
             let saved = null;
@@ -1168,6 +1444,16 @@ class UIManager {
         if (this.lastYearInput) {
             this.lastYearInput.value = this.matchHistory.getYear(this.exchangeYear() - 1)
                 .map(p => `${p.giver} -> ${p.receiver}`).join('\n');
+        }
+    }
+
+    // CSS hides the mode switch and the game while body has .bad-santa-off,
+    // whatever mode bad-santa.js restores.
+    applyBadSantaVisibility(show) {
+        document.body.classList.toggle('bad-santa-off', !show);
+        if (!show && document.body.dataset.mode === 'bad-santa') {
+            const back = document.querySelector('#modeSwitch [data-mode="secret-santa"]');
+            if (back) back.click();
         }
     }
 
@@ -1551,6 +1837,8 @@ if (typeof module !== 'undefined' && module.exports) {
         Person,
         GiftExchangeService,
         PartyReveal,
+        GuidedTour,
+        TOUR_STEPS,
         SoundService,
         EventDetails,
         MatchHistory,

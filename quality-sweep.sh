@@ -168,8 +168,9 @@ else
   fail "$GUARD missing or not executable"
 fi
 
+HOOKS_DIR="$(git rev-parse --git-path hooks)"  # works in linked worktrees too, where .git is a file
 for h in pre-commit commit-msg pre-push; do
-  [[ -x ".git/hooks/$h" ]] && ok "git hook installed: $h" || fail "git hook NOT installed: $h → bash init.sh"
+  [[ -x "$HOOKS_DIR/$h" ]] && ok "git hook installed: $h" || fail "git hook NOT installed: $h → bash init.sh"
 done
 
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then

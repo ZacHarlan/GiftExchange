@@ -10,6 +10,11 @@ test.describe('Bad Santa', () => {
         await page.click('#importBtn');
         await expect(page.locator('#nameList li')).toHaveCount(3);
 
+        // Bad Santa is hidden until it's turned on in Settings.
+        await expect(page.locator('#modeSwitch')).toBeHidden();
+        await page.click('#toggleSettingsBtn');
+        await page.click('label[for="showBadSantaToggle"]');
+        await page.click('#toggleSettingsBtn');
         await page.click('#modeSwitch [data-mode="bad-santa"]');
         await expect(page.locator('#badSantaSection')).toBeVisible();
         await expect(page.locator('.input-section')).toBeHidden();

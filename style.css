@@ -1671,11 +1671,13 @@ body.party-mode {
     box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--accent) 90%, transparent);
 }
 
-body[data-mode="bad-santa"] .input-section,
-body[data-mode="bad-santa"] .list-section,
-body[data-mode="bad-santa"] .action-section,
-body[data-mode="bad-santa"] #resultsSection,
-body:not([data-mode="bad-santa"]) #badSantaSection {
+body[data-mode="bad-santa"]:not(.bad-santa-off) .input-section,
+body[data-mode="bad-santa"]:not(.bad-santa-off) .list-section,
+body[data-mode="bad-santa"]:not(.bad-santa-off) .action-section,
+body[data-mode="bad-santa"]:not(.bad-santa-off) #resultsSection,
+body:not([data-mode="bad-santa"]) #badSantaSection,
+body.bad-santa-off #badSantaSection,
+body.bad-santa-off #modeSwitch {
     display: none !important;
 }
 
@@ -1983,5 +1985,155 @@ body:not([data-mode="bad-santa"]) #badSantaSection {
 
     .bs-actor {
         font-size: 1.35rem;
+    }
+}
+
+/* --- Guided tour ("How it works") ------------------------------------------- */
+.tour-btn {
+    position: absolute;
+    top: 1.4rem;
+    left: 1.2rem;
+    z-index: 2;
+    height: 40px;
+    padding: 0 0.95rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    color: var(--text-soft);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--card-edge);
+}
+
+.tour-btn:hover {
+    color: var(--text);
+    background: rgba(245, 196, 90, 0.15);
+}
+
+.tour-btn span {
+    color: var(--gold);
+}
+
+.tour-invite {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem 0.75rem;
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.92rem;
+    color: var(--text-soft);
+    border: 1px dashed var(--card-edge);
+    border-radius: var(--radius);
+    background: rgba(245, 196, 90, 0.06);
+}
+
+.tour-invite .link-btn:hover {
+    color: var(--text);
+}
+
+.tour-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+}
+
+/* No spotlight on this step: dim the whole page and center the card. */
+.tour-overlay.tour-centered {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(4, 2, 6, 0.72);
+}
+
+.tour-spotlight {
+    position: fixed;
+    border-radius: var(--radius);
+    border: 2px solid var(--gold);
+    box-shadow: 0 0 0 9999px rgba(4, 2, 6, 0.72), 0 0 24px 4px var(--glow);
+    pointer-events: none;
+    transition: top 0.35s ease, left 0.35s ease, width 0.35s ease, height 0.35s ease;
+}
+
+.tour-card {
+    position: fixed;
+    width: min(360px, calc(100vw - 24px));
+    padding: 1.15rem 1.25rem 1rem;
+    color: var(--text);
+    text-align: left;
+    background: color-mix(in srgb, var(--sky-3) 94%, var(--sky-1));
+    border: 1px solid var(--card-edge);
+    border-radius: 18px;
+    box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.85);
+    transition: top 0.35s ease, left 0.35s ease;
+    animation: fade-in 0.25s ease-out;
+}
+
+.tour-centered .tour-card {
+    position: relative;
+}
+
+.tour-progress {
+    font-size: 0.72rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+
+.tour-title {
+    margin: 0.3rem 0 0.4rem;
+    font-family: var(--font-heading);
+    font-size: 1.3rem;
+}
+
+.tour-text {
+    color: var(--text-soft);
+    line-height: 1.5;
+    font-size: 0.95rem;
+}
+
+.tour-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.tour-nav .tour-skip {
+    margin-right: auto;
+}
+
+.tour-nav .tour-skip:hover {
+    color: var(--text);
+}
+
+.tour-nav .primary-btn,
+.tour-nav .secondary-btn {
+    width: auto;
+    margin: 0;
+    padding: 0.6rem 1.05rem;
+    font-size: 0.92rem;
+}
+
+.tour-nav .secondary-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+    /* On phones the card docks to the bottom of the screen. */
+    .tour-overlay:not(.tour-centered) .tour-card {
+        top: auto !important;
+        left: 12px !important;
+        right: 12px;
+        bottom: 12px;
+        width: auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tour-spotlight,
+    .tour-card {
+        transition: none;
     }
 }

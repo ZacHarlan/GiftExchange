@@ -18,7 +18,7 @@ If `bash init.sh` fails, fixing it **is** the task.
 | Thing | Value |
 |---|---|
 | App | Static, single-page, vanilla JS — `index.html` + `script.js` + `style.css`. No build step, no backend, no database. |
-| Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`, `giftExchange.badSanta` (saved Bad Santa game). Names/wishlists never leave the browser. |
+| Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`, `giftExchange.badSanta` (saved Bad Santa game), `giftExchange.showBadSanta` (`'true'` shows Bad Santa; hidden by default), `giftExchange.tourSeen` (`'1'` once the guided tour was finished, skipped or declined). Names/wishlists never leave the browser. |
 | Art | Blender 5.2 (Cycles) scene scripts in `art/` → `art/post.py` (Pillow) → `assets/*.webp`. Rebuild: `bash art/render.sh`. |
 | Runtime (dev) | Node ≥ 18 (developed on 26), npm 11 |
 | Dev server | `scripts/serve.js` (zero-dependency) → http://localhost:8085, `GET /health` → `{"status":"ok"}` |
