@@ -234,5 +234,21 @@
     "verification": "! bash tests/guardrails/run.sh | grep -q OPEN",
     "priority": 42,
     "passes": false
+  },
+  {
+    "id": "guided-tour",
+    "category": "functional",
+    "description": "\"How it works\" spotlight walkthrough (GuidedTour + TOUR_STEPS in script.js): dims the page and highlights each part in turn (add names, family groups, bulk import, settings, list, shuffle, results, Bad Santa, sound) with Back/Next/Skip, arrow keys, Esc and a focus trap; hidden targets fall back to a centered card; phone layout docks the card to the bottom. First visit shows an inline invite (never an uninvited pop-up); finishing, skipping or declining sets giftExchange.tourSeen.",
+    "verification": "npx jest tests/unit/guided-tour.test.js && npx playwright test tests/e2e/guided-tour.spec.js",
+    "priority": 31,
+    "passes": true
+  },
+  {
+    "id": "bad-santa-opt-in",
+    "category": "functional",
+    "description": "Settings has a \"Show Bad Santa\" switch, off by default. While off, body.bad-santa-off hides the mode switch and the Bad Santa game (even if a saved game is in progress) and the app stays in Secret Santa. Saved as giftExchange.showBadSanta.",
+    "verification": "npx jest tests/unit/bad-santa-toggle.test.js && npx playwright test tests/e2e/bad-santa.spec.js",
+    "priority": 32,
+    "passes": true
   }
 ]
