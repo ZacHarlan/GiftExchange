@@ -18,7 +18,7 @@
     <link rel="preload" as="image" href="assets/menorah-sprite.webp">
 </head>
 
-<body data-theme="christmas">
+<body data-theme="christmas" class="bad-santa-off">
     <div class="sky" aria-hidden="true"></div>
     <div class="snow" aria-hidden="true"><i></i><i></i><i></i></div>
 
@@ -28,6 +28,7 @@
             <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
         </div>
 
+        <button id="tourBtn" class="tour-btn" type="button" aria-label="How it works — take the tour"><span aria-hidden="true">✦</span> How it works</button>
         <button id="soundToggle" class="sound-toggle" type="button" aria-pressed="true" aria-label="Sound on — click to mute">🔔</button>
 
         <header>
@@ -39,6 +40,11 @@
             <h1>Holiday Gift Exchange</h1>
             <p class="tagline">Add everyone, press the big button, and let the holiday magic pick.</p>
             <p id="eventBanner" class="event-banner hidden" aria-live="polite"></p>
+            <div id="tourInvite" class="tour-invite hidden">
+                <span>New here? A one-minute tour shows you around.</span>
+                <button id="tourInviteStart" class="chip-btn" type="button">Show me around</button>
+                <button id="tourInviteDismiss" class="link-btn" type="button">No thanks</button>
+            </div>
         </header>
 
         <div id="modeSwitch" class="mode-switch" role="group" aria-label="Game mode">
@@ -67,7 +73,7 @@
                     <div class="help-content">
                         <p><strong>Bulk Import</strong> lets you paste a list of people, separated by commas or one per line.</p>
                         <p>Format: <strong>First Last</strong>, optionally <strong>[Family Group]</strong> and <strong>{Wishlist}</strong>.</p>
-                        <div class="help-sample">Alice A [GroupA] {Books}, Bob B [GroupB], Zac Harlan 1, Pat Harlan 2</div>
+                        <div class="help-sample">Alice A [GroupA] {Books}, Bob B [GroupB], Sam Smith 1, Pat Smith 2</div>
                         <p>Edit the sample to match your group, then click <strong>Import Names</strong>.</p>
                     </div>
                 </details>
@@ -78,7 +84,7 @@
                         <p><strong>Family Group</strong> is the label used to prevent matches within the same household/family.</p>
                         <p>People with the same Family Group will never be assigned to each other.</p>
                         <p>If you leave it blank, it defaults to the person’s last name.</p>
-                        <p>Two households with the same surname? Add a number: <strong>Harlan 1</strong> and <strong>Harlan 2</strong> become separate families.</p>
+                        <p>Two households with the same surname? Add a number: <strong>Smith 1</strong> and <strong>Smith 2</strong> become separate families.</p>
                     </div>
                 </details>
             </div>
@@ -121,7 +127,12 @@
                     <span class="switch" aria-hidden="true"></span>
                     <span>Avoid last year’s matches</span>
                 </label>
-                <label for="lastYearInput" class="field-label">Last year’s matches <span class="field-hint">— one per line, e.g. Zac Harlan -&gt; Mindy Rice. Filled in automatically after each shuffle.</span></label>
+                <label class="switch-row" for="showBadSantaToggle">
+                    <input type="checkbox" id="showBadSantaToggle">
+                    <span class="switch" aria-hidden="true"></span>
+                    <span>Show Bad Santa (white elephant game)</span>
+                </label>
+                <label for="lastYearInput" class="field-label">Last year’s matches <span class="field-hint">— one per line, e.g. Sam Smith -&gt; Jo Jones. Filled in automatically after each shuffle.</span></label>
                 <textarea id="lastYearInput" rows="3" placeholder="Giver -> Receiver"></textarea>
                 <button id="saveCoreFamiliesBtn" class="primary-btn">Save settings</button>
             </div>
@@ -205,6 +216,21 @@
         <div class="party-controls">
             <button id="partyPrev" class="secondary-btn" type="button">◀ Back</button>
             <button id="partyNext" class="primary-btn" type="button">Reveal ▶</button>
+        </div>
+    </div>
+
+    <!-- Guided tour ("How it works"): spotlight + step card -->
+    <div id="tourOverlay" class="tour-overlay hidden">
+        <div id="tourSpotlight" class="tour-spotlight hidden" aria-hidden="true"></div>
+        <div id="tourCard" class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tourTitle" aria-describedby="tourText">
+            <p id="tourProgress" class="tour-progress"></p>
+            <h2 id="tourTitle" class="tour-title"></h2>
+            <p id="tourText" class="tour-text"></p>
+            <div class="tour-nav">
+                <button id="tourSkip" class="link-btn tour-skip" type="button">Skip tour</button>
+                <button id="tourPrev" class="secondary-btn" type="button">Back</button>
+                <button id="tourNext" class="primary-btn" type="button">Next</button>
+            </div>
         </div>
     </div>
 
