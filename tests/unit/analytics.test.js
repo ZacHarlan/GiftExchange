@@ -32,6 +32,23 @@ describe('AnalyticsService', () => {
         expect(Object.prototype.toString.call(global.dataLayer[0])).toBe('[object Arguments]');
     });
 
+    test('a GTM- tag loads gtm.js and sends no config command, as in Google\'s install snippet', () => {
+        const { analytics, global, loadScript } = liveService({ measurementId: 'GTM-TEST123' });
+        analytics.start();
+        analytics.track('tour_start');
+        expect(loadScript).toHaveBeenCalledWith('https://www.googletagmanager.com/gtm.js?id=GTM-TEST123');
+        const calls = sent(global);
+        expect(calls.map(c => c[0])).toEqual(['js', 'event']);
+        expect(calls[1]).toEqual(['event', 'tour_start', {}]);
+    });
+
+    test('the shipped tag is the one issued for this site and is live on the Pages host', () => {
+        const loadScript = jest.fn();
+        const analytics = new AnalyticsService({ global: { location: { hostname: LIVE_HOST } }, loadScript });
+        analytics.start();
+        expect(loadScript).toHaveBeenCalledWith('https://www.googletagmanager.com/gtm.js?id=GTM-MF62QPXB');
+    });
+
     test.each([
         ['no Measurement ID is set', { measurementId: '' }],
         ['the Measurement ID is malformed', { measurementId: 'UA-12345-1' }],

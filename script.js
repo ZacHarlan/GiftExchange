@@ -631,8 +631,9 @@ class MusicService {
 //     free text can therefore never be sent, whatever a caller passes.
 //   - Every accepted event is also kept in `log` (newest last) so tests can read it.
 
-// Paste the GA4 property's Measurement ID (G-XXXXXXXXXX) here to switch analytics on.
-const GA_MEASUREMENT_ID = '';
+// The site's Google tag. GTM-MF62QPXB is the tag Google issued for this site; it reports to the
+// GA4 property G-PE51JMC1XH. Set to '' to switch analytics off. A plain G-XXXXXXXXXX id also works.
+const GA_MEASUREMENT_ID = 'GTM-MF62QPXB';
 const GA_LIVE_HOST = 'zacharlan.github.io';
 
 class AnalyticsService {
@@ -655,8 +656,11 @@ class AnalyticsService {
         // gtag.js only accepts the `arguments` object itself, not an array copy.
         this.send = function gtag() { queue.push(arguments); };
         this.send('js', new Date());
-        this.send('config', this.measurementId);
-        this.loadScript(`https://www.googletagmanager.com/gtag/js?id=${this.measurementId}`);
+        // A GTM- tag carries its own configuration (as in Google's install snippet); a G- id
+        // needs the config command.
+        const selfConfigured = this.measurementId.startsWith('GTM-');
+        if (!selfConfigured) this.send('config', this.measurementId);
+        this.loadScript(`https://www.googletagmanager.com/${selfConfigured ? 'gtm.js' : 'gtag/js'}?id=${this.measurementId}`);
     }
 
     track(name, params = {}) {
@@ -683,7 +687,7 @@ class AnalyticsService {
     }
 }
 
-AnalyticsService.ID_FORMAT = /^G-[A-Z0-9]{6,}$/;
+AnalyticsService.ID_FORMAT = /^(G|GTM)-[A-Z0-9]{6,}$/;
 // Event name -> the only parameters it may carry.
 AnalyticsService.EVENTS = {
     draw_names: ['participants', 'theme'],

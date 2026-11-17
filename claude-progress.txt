@@ -122,3 +122,6 @@ DECISIONS:
          - Bad Santa mode is not tracked yet (bad-santa.js has its own UI); page views cover it.
 NEXT   : owner supplies the G-XXXXXXXXXX id -> set GA_MEASUREMENT_ID -> PR + merge -> confirm on the live
          site that gtag/js loads and Realtime shows the visit. Not pushed yet.
+         2026-11-17 later: owner pasted Google's install snippet -> GA_MEASUREMENT_ID = 'GTM-MF62QPXB' (a Google
+         tag loaded from gtm.js, no config command; its published container reports to G-PE51JMC1XH).
+         AnalyticsService accepts GTM- and G- ids. unit+arch 203.
