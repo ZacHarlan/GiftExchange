@@ -47,6 +47,7 @@ const DOMAIN = ['Person', 'GiftExchangeService', 'BadSantaGame'];
 const SOURCES = ['script.js', 'bad-santa.js'];
 const BROWSER_GLOBALS = /\b(document|window|localStorage|sessionStorage|navigator|alert|confirm|setTimeout|setInterval)\b/;
 const STORAGE = /\b(localStorage|sessionStorage)\b/;
+const THIRD_PARTY = /googletagmanager|google-analytics|\bdataLayer\b|\bgtag\b|createElement\(\s*['"`]script/;
 const NETWORK = /\b(fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|import\s*\()/;
 
 const RULES = [
@@ -65,7 +66,7 @@ const RULES = [
     },
     {
         id: 'no-network-calls',
-        why: 'Participant names and wishlists never leave the browser. The app is deliberately offline; any network call is a privacy change that needs a human decision.',
+        why: 'Participant names and wishlists never leave the browser. Any network call is a privacy change that needs a human decision. The one approved exception is Google Analytics (owner, 2026-11-17), which is confined by the analytics-contained rule.',
         fix: 'Remove the network call. If a feature truly needs one, get explicit approval and update this rule first.',
         scan: (bodies, src, files = { 'script.js': src }) =>
             Object.fromEntries(Object.entries(files).map(([f, text]) => [f, count(text.replace(/^\s*\/\/.*$/gm, ''), NETWORK)])),
@@ -99,7 +100,7 @@ const RULES = [
     },
     {
         id: 'index-html-local-scripts-only',
-        why: 'All code must be the reviewed local script.js. A third-party <script> could read every name entered.',
+        why: 'All code must be the reviewed local script.js. A third-party <script> could read every name entered. The one approved exception is Google\'s gtag.js, which AnalyticsService adds on the live site only (see analytics-contained); it is never written into index.html.',
         fix: 'Vendor the code into the repo, or remove it. Only Google Fonts stylesheets are allowed as external links.',
         scan: () => {
             const html = read('index.html');
@@ -108,6 +109,18 @@ const RULES = [
                 l => !/fonts\.(googleapis|gstatic)\.com/.test(l)
             ).length;
             return { 'index.html': extScripts + extLinks };
+        },
+    },
+    {
+        id: 'analytics-contained',
+        why: 'Google Analytics is the only third-party code and the only thing that sends data out (owner decision 2026-11-17). Keeping every trace of it inside AnalyticsService means its allowlist (event names, parameter names, fixed values) is the single gate, so names and wishlists cannot be sent by accident.',
+        fix: 'Call this.analytics.track(name, params) from UIManager and add the event to AnalyticsService.EVENTS. Never create <script> elements, touch dataLayer/gtag or name a Google Analytics host anywhere else, including index.html.',
+        scan: (bodies, src, files = { 'script.js': src }) => {
+            const outside = text =>
+                text.replace(/^class AnalyticsService[\s\S]*?^}/m, '').replace(/^\s*\/\/.*$/gm, '');
+            const counts = Object.fromEntries(Object.entries(files).map(([f, text]) => [f, count(outside(text), THIRD_PARTY)]));
+            counts['index.html'] = count(read('index.html'), THIRD_PARTY);
+            return counts;
         },
     },
     {
