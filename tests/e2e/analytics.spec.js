@@ -15,4 +15,12 @@ test.describe('Analytics', () => {
         expect(await page.locator('script[src*="googletagmanager"]').count()).toBe(0);
         expect(await page.evaluate(() => typeof window.dataLayer)).toBe('undefined');
     });
+
+    test('the page says what is collected', async ({ page }) => {
+        await page.goto('/');
+        const note = page.locator('#privacyNote');
+        await expect(note).toBeVisible();
+        await expect(note).toContainText('Names and wishlists stay in this browser');
+        await expect(note).toContainText('Google Analytics');
+    });
 });
