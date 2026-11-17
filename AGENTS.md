@@ -19,6 +19,7 @@ If `bash init.sh` fails, fixing it **is** the task.
 |---|---|
 | App | Static, single-page, vanilla JS — `index.html` + `script.js` + `style.css`. No build step, no backend, no database. |
 | Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`, `giftExchange.badSanta` (saved Bad Santa game), `giftExchange.showBadSanta` (`'true'` shows Bad Santa; hidden by default), `giftExchange.tourSeen` (`'1'` once the guided tour was finished, skipped or declined), `giftExchange.music` (`'off'` turns background music off). Names/wishlists never leave the browser. |
+| Analytics | Google Analytics 4 via `AnalyticsService` in `script.js` (owner decision 2026-11-17). Loads the Google tag script only when `GA_MEASUREMENT_ID` is set **and** the page is on `zacharlan.github.io`; never on localhost or in tests. Sends a page view plus `draw_names` (count, theme), `share` (copy/email/print), `tour_start`, `theme_change`. Only events, parameters and values on its allowlist can be sent, so never names, wishlists or family groups. |
 | Art | Blender 5.2 (Cycles) scene scripts in `art/` → `art/post.py` (Pillow) → `assets/*.webp`. Rebuild: `bash art/render.sh`. |
 | Runtime (dev) | Node ≥ 18 (developed on 26), npm 11 |
 | Dev server | `scripts/serve.js` (zero-dependency) → http://localhost:8085, `GET /health` → `{"status":"ok"}` |
@@ -38,7 +39,8 @@ All app code is in `script.js`, in layers. Arrows = "may depend on".
     theme, clipboard,   │      no browser APIs)
     mailto)             │
         ├──▶ ParticipantStore   (saves the list; storage injected)
-        └──▶ AnimationService   (overlay animation only; knows nothing about people)
+        ├──▶ AnimationService   (overlay animation only; knows nothing about people)
+        └──▶ AnalyticsService   (Google Analytics; live site only; allowlisted events, no user data)
 ```
 
 Wiring happens once at the bottom of `script.js` (`DOMContentLoaded`) — services are injected into `UIManager`.
@@ -50,11 +52,12 @@ Wiring happens once at the bottom of `script.js` (`DOMContentLoaded`) — servic
 | `domain-no-browser-apis` | `Person` / `GiftExchangeService` never touch `document`, `window`, storage, timers, `navigator`. |
 | `storage-only-in-uimanager` | Only `UIManager` reads/writes `localStorage`. |
 | `no-network-calls` | No `fetch`, XHR, WebSocket, beacons, dynamic `import()` — privacy guarantee. |
+| `analytics-contained` | Google Analytics (the one approved third-party script) is referenced only inside `AnalyticsService`: no `<script>` creation, `dataLayer`/`gtag` or Google Analytics host anywhere else, including `index.html`. |
 | `animation-independent-of-domain` | `AnimationService` never references people/assignments. |
 | `randomness-injected` | Shuffle randomness should be injectable (baselined: 1). |
 | `no-html-interpolation` | No `innerHTML = \`…${userData}\`` — XSS (baselined: 2). |
 | `no-window-globals` | No `window.x = …` / inline `onclick` (baselined: 1). |
-| `index-html-local-scripts-only` | No third-party `<script>`; only Google Fonts links. |
+| `index-html-local-scripts-only` | No third-party `<script>` in `index.html`; only Google Fonts links. |
 | `exports-contract` | `script.js` keeps exporting the 4 classes for tests. |
 
 **Ratchet:** `tests/architecture/baseline.json` lists violations that existed on 2026-10-24. New ones fail the test. When you fix one, *lower* its count — the sweep fails until you do. Never raise a count.
@@ -64,7 +67,7 @@ Wiring happens once at the bottom of `script.js` (`DOMContentLoaded`) — servic
 | File | Purpose |
 |---|---|
 | `index.html` | Markup; every element the JS touches has an `id`. |
-| `script.js` | All app logic: `Person`, `GiftExchangeService`, `AnimationService`, `UIManager`. |
+| `script.js` | All app logic: `Person`, `GiftExchangeService`, `AnimationService`, `AnalyticsService`, `UIManager`. |
 | `bad-santa.js` | Bad Santa (white elephant) mode: `BadSantaGame` (pure engine), `BadSantaStore` (`giftExchange.badSanta`), `BadSantaUI`. Loaded after `script.js`. |
 | `style.css` | All styling. Palettes are CSS custom properties per `body[data-theme="christmas|hanukkah"]`. |
 | `art/` | Blender scene scripts (`art/common.py` helpers, one file per scene), `art/post.py`, `art/render.sh`. |

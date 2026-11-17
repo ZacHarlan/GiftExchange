@@ -106,3 +106,19 @@ DECISIONS:
          - One track for both themes (only one was downloaded). MusicService.TRACKS can map Hanukkah to its own.
          - Old dev server on 8088 (from the crashed session) predates the serve.js change; used 8089.
 NEXT   : owner listens locally, then PR + merge (use GH_TOKEN=$(gh auth token -u ZacHarlan)).
+
+--- 2026-11-17  claude-fable-5-2 / Google Analytics (feat/analytics) ---
+DONE   : Owner asked for Google Analytics "like the other sites" (same shape as Faith Through Time's analytics.js).
+         AnalyticsService in script.js: loads gtag.js only when GA_MEASUREMENT_ID is set AND hostname is
+         zacharlan.github.io; injected into UIManager as the 9th argument (default is an off instance).
+         Events: page view, draw_names {participants, theme}, share {method: copy|email|print}, tour_start,
+         theme_change {theme}. track() drops anything not on EVENTS/VALUES, so no names or free text can go out.
+         New architecture rule analytics-contained; no-network-calls / index-html-local-scripts-only "why"
+         text now names this one approved exception.
+TESTS  : unit+arch 185 -> 201; e2e 15 -> 16 (analytics.spec.js: no Google request on localhost).
+DECISIONS:
+         - Owner chose a NEW GA4 property for this site, ID to follow. GA_MEASUREMENT_ID is '' so analytics
+           is off everywhere until it is pasted in (script.js, top of the Analytics section).
+         - Bad Santa mode is not tracked yet (bad-santa.js has its own UI); page views cover it.
+NEXT   : owner supplies the G-XXXXXXXXXX id -> set GA_MEASUREMENT_ID -> PR + merge -> confirm on the live
+         site that gtag/js loads and Realtime shows the visit. Not pushed yet.

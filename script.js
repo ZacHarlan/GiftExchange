@@ -619,6 +619,81 @@ class MusicService {
     }
 }
 
+// --- Analytics ---
+// Google Analytics 4, on the live site only (owner decision 2026-11-17).
+//
+// This is the one place where third-party code is loaded and anything leaves the browser.
+// Rules it keeps:
+//   - Off unless GA_MEASUREMENT_ID is set AND the page is on GA_LIVE_HOST, so localhost,
+//     file:// and test runs never load Google's script or reach the property.
+//   - track() only sends events listed in EVENTS, with only the listed parameters, and each
+//     value must be a number, a boolean or one of VALUES. Names, wishlists, family groups and
+//     free text can therefore never be sent, whatever a caller passes.
+//   - Every accepted event is also kept in `log` (newest last) so tests can read it.
+
+// Paste the GA4 property's Measurement ID (G-XXXXXXXXXX) here to switch analytics on.
+const GA_MEASUREMENT_ID = '';
+const GA_LIVE_HOST = 'zacharlan.github.io';
+
+class AnalyticsService {
+    constructor(options = {}) {
+        this.measurementId = options.measurementId !== undefined ? options.measurementId : GA_MEASUREMENT_ID;
+        this.global = options.global || (typeof window !== 'undefined' ? window : null);
+        const hostname = options.hostname !== undefined
+            ? options.hostname
+            : (this.global && this.global.location ? this.global.location.hostname : '');
+        this.live = AnalyticsService.ID_FORMAT.test(this.measurementId) && hostname === GA_LIVE_HOST;
+        this.loadScript = options.loadScript || AnalyticsService.appendScript;
+        this.log = [];
+        this.send = null;
+    }
+
+    // Loads gtag.js and sends the page view. Does nothing when not live.
+    start() {
+        if (!this.live || this.send) return;
+        const queue = this.global.dataLayer = this.global.dataLayer || [];
+        // gtag.js only accepts the `arguments` object itself, not an array copy.
+        this.send = function gtag() { queue.push(arguments); };
+        this.send('js', new Date());
+        this.send('config', this.measurementId);
+        this.loadScript(`https://www.googletagmanager.com/gtag/js?id=${this.measurementId}`);
+    }
+
+    track(name, params = {}) {
+        const allowedKeys = AnalyticsService.EVENTS[name];
+        if (!allowedKeys) return;
+        const clean = {};
+        for (const key of allowedKeys) {
+            const value = params[key];
+            const safe = (typeof value === 'number' && Number.isFinite(value))
+                || typeof value === 'boolean'
+                || AnalyticsService.VALUES.includes(value);
+            if (safe) clean[key] = value;
+        }
+        this.log.push({ name, params: clean });
+        if (this.log.length > 50) this.log.shift();
+        if (this.send) this.send('event', name, clean);
+    }
+
+    static appendScript(src) {
+        const script = document.createElement('script');
+        script.async = true;
+        script.src = src;
+        document.head.appendChild(script);
+    }
+}
+
+AnalyticsService.ID_FORMAT = /^G-[A-Z0-9]{6,}$/;
+// Event name -> the only parameters it may carry.
+AnalyticsService.EVENTS = {
+    draw_names: ['participants', 'theme'],
+    share: ['method'],
+    tour_start: [],
+    theme_change: ['theme'],
+};
+// The only strings that may be sent as a parameter value.
+AnalyticsService.VALUES = ['christmas', 'hanukkah', 'copy', 'email', 'print'];
+
 class AnimationService {
     constructor(sound) {
         this.sound = sound || null;
@@ -1272,8 +1347,10 @@ function el(tag, className, text) {
 }
 
 class UIManager {
-    constructor(exchangeService, animationService, participantStore, matchHistory, soundService, partyReveal, guidedTour, musicService) {
+    constructor(exchangeService, animationService, participantStore, matchHistory, soundService, partyReveal, guidedTour, musicService, analyticsService) {
         this.exchangeService = exchangeService;
+        // Off by default: only the app wiring at the bottom of this file passes a live one.
+        this.analytics = analyticsService || new AnalyticsService({ measurementId: '' });
         this.music = musicService || null;
         this.tour = guidedTour || new GuidedTour(TOUR_STEPS);
         this.sound = soundService || null;
@@ -1351,6 +1428,7 @@ class UIManager {
         this.initMusic();
         this.restoreParticipants();
         this.updateButtons();
+        this.analytics.start();
     }
 
     // "How it works" walkthrough. First-time visitors get an invite (never an
@@ -1380,6 +1458,7 @@ class UIManager {
             if (back) back.click();
         }
         if (this.tourInvite) this.tourInvite.classList.add('hidden');
+        this.analytics.track('tour_start');
         this.tour.start();
     }
 
@@ -1527,6 +1606,7 @@ class UIManager {
         if (this.themeSelect) {
             this.themeSelect.addEventListener('change', () => {
                 this.applyTheme(this.themeSelect.value);
+                this.analytics.track('theme_change', { theme: this.themeSelect.value });
                 try {
                     localStorage.setItem(this.STORAGE_KEY_THEME, this.themeSelect.value);
                 } catch (_) { }
@@ -1787,6 +1867,8 @@ class UIManager {
 
             const theme = this.themeSelect ? this.themeSelect.value : 'christmas';
 
+            this.analytics.track('draw_names', { participants: assignments.length, theme });
+
             // If successful, play animation then show results
             this.animationService.play(theme, () => {
                 this.displayResults(assignments);
@@ -1854,6 +1936,7 @@ class UIManager {
         const results = this.resultLines();
         if (results.length === 0) return;
         const textToCopy = this.shareText();
+        this.analytics.track('share', { method: 'copy' });
         navigator.clipboard.writeText(textToCopy).then(() => {
             const originalText = this.copyBtn.textContent;
             this.copyBtn.textContent = 'Copied!';
@@ -1875,6 +1958,7 @@ class UIManager {
         const bodyContent = "Here are the Gift Exchange assignments:\n\n" + this.shareText() + "\n\nGenerated by the Gift Exchange Helper.";
         const body = encodeURIComponent(bodyContent);
 
+        this.analytics.track('share', { method: 'email' });
         window.location.href = `mailto:?subject=${subject}&body=${body}`;
     }
 
@@ -1961,6 +2045,7 @@ class UIManager {
     // out privately; the giver tears it off and the tag goes on the present.
     handlePrintTags() {
         if (!this.printSheet || this.lastAssignments.length === 0) return;
+        this.analytics.track('share', { method: 'print' });
         const details = EventDetails.summaryLine(this.eventDetails());
         this.printSheet.replaceChildren(...this.lastAssignments.map(({ giver, receiver }) => {
             const tag = el('article', 'gift-tag');
@@ -2021,7 +2106,7 @@ if (typeof document !== 'undefined') {
         const exchangeService = new GiftExchangeService();
         const sound = new SoundService();
         const animationService = new AnimationService(sound);
-        new UIManager(exchangeService, animationService, undefined, undefined, sound, undefined, undefined, new MusicService());
+        new UIManager(exchangeService, animationService, undefined, undefined, sound, undefined, undefined, new MusicService(), new AnalyticsService());
     });
 }
 
@@ -2032,6 +2117,7 @@ if (typeof module !== 'undefined' && module.exports) {
         GiftExchangeService,
         PartyReveal,
         MusicService,
+        AnalyticsService,
         GuidedTour,
         TOUR_STEPS,
         SoundService,

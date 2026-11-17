@@ -258,5 +258,13 @@
     "verification": "npx jest tests/unit/music.test.js tests/unit/sound.test.js tests/unit/serve.test.js && npx playwright test tests/e2e/music.spec.js",
     "priority": 33,
     "passes": true
+  },
+  {
+    "id": "google-analytics",
+    "category": "functional",
+    "description": "Google Analytics 4 (AnalyticsService in script.js). Off unless GA_MEASUREMENT_ID is set and the page is on zacharlan.github.io, so localhost and tests never load gtag.js. Sends a page view plus draw_names (participants, theme), share (copy/email/print), tour_start and theme_change; an allowlist of events, parameters and values means names and wishlists can never be sent. Architecture rule analytics-contained keeps all of it inside AnalyticsService.",
+    "verification": "npx jest tests/unit/analytics.test.js tests/architecture && npx playwright test tests/e2e/analytics.spec.js",
+    "priority": 34,
+    "passes": true
   }
 ]
