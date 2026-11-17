@@ -367,6 +367,15 @@ header h1 {
     opacity: 0.9;
 }
 
+/* Small print at the bottom of the card: what is and is not collected */
+.privacy-note {
+    margin-top: 1.5rem;
+    color: var(--text-soft);
+    font-size: 0.8rem;
+    text-align: center;
+    opacity: 0.75;
+}
+
 /* Budget · date · countdown chips under the title */
 .event-banner {
     display: flex;
