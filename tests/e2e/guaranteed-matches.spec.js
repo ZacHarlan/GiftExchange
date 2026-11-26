@@ -26,8 +26,10 @@ test.describe('Guaranteed matches', () => {
 
         await shuffle(page);
         await expect(page.locator('.result-card')).toHaveCount(5);
-        const deeCard = page.locator('.result-card', { hasText: 'Dee Dunn' }).filter({ hasText: 'Ann Avery' });
-        await expect(deeCard).toHaveCount(1);
+        // The card where Dee is the giver (Ann may, by chance, also be buying for Dee).
+        const deeGives = page.locator('.result-card').filter({ has: page.locator('.giver', { hasText: 'Dee Dunn' }) });
+        await expect(deeGives).toHaveCount(1);
+        await expect(deeGives.locator('.receiver')).toHaveText('Ann Avery');
 
         // Remembered after a reload, with the list.
         await page.reload();
