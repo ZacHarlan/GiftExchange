@@ -38,7 +38,48 @@ class GiftExchangeService {
     constructor(coreFamilies) {
         this.names = [];
         this.excludedPairs = new Set();
+        this.fixedPairs = [];
         this.setCoreFamilies(coreFamilies ?? []);
+    }
+
+    // Guaranteed matches ({giver, receiver} full names): the giver always buys for the
+    // receiver. They win over the family-group and last-year rules. Names are checked
+    // against the list at draw time, so the list can change after these are set.
+    setFixedPairs(pairs) {
+        this.fixedPairs = (Array.isArray(pairs) ? pairs : [])
+            .filter(p => p && p.giver && p.receiver)
+            .map(p => ({ giver: String(p.giver), receiver: String(p.receiver) }));
+    }
+
+    // Turns the guaranteed matches into people on the list, or explains what is wrong.
+    _resolveFixedPairs() {
+        const clean = name => String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+        const find = name => this.names.find(p => clean(p.getFullName()) === clean(name));
+        const resolved = [];
+        for (const pair of this.fixedPairs) {
+            const giver = find(pair.giver);
+            const receiver = find(pair.receiver);
+            const missing = !giver ? pair.giver : !receiver ? pair.receiver : null;
+            if (missing) {
+                throw new Error(`Guaranteed match: “${missing.trim()}” isn’t on the list. Fix it in Settings.`);
+            }
+            if (giver === receiver) {
+                throw new Error(`Guaranteed match: ${giver.getFullName()} can’t buy for themselves.`);
+            }
+            const same = resolved.some(r => r.giver === giver && r.receiver === receiver);
+            if (same) continue;
+            if (resolved.some(r => r.giver === giver)) {
+                throw new Error(`Guaranteed match: ${giver.getFullName()} is set to buy for two people.`);
+            }
+            if (resolved.some(r => r.receiver === receiver)) {
+                throw new Error(`Guaranteed match: two people are set to buy for ${receiver.getFullName()}.`);
+            }
+            if (this.isCoreLastName(giver.lastName) !== this.isCoreLastName(receiver.lastName)) {
+                throw new Error(`Guaranteed match: ${giver.getFullName()} and ${receiver.getFullName()} can’t be matched because only one of them is in the Core families (${this.getCoreFamiliesDisplay()}).`);
+            }
+            resolved.push({ giver, receiver });
+        }
+        return resolved;
     }
 
     // Pairs ({giver, receiver} full names) that must not be drawn again, e.g. last year's.
@@ -145,6 +186,8 @@ class GiftExchangeService {
             throw new Error('Please add at least 2 people.');
         }
 
+        const fixed = this._resolveFixedPairs();
+
         // Split into pools
         const corePool = this.names.filter(p => this.isCoreLastName(p.lastName));
         const otherPool = this.names.filter(p => !this.isCoreLastName(p.lastName));
@@ -157,36 +200,49 @@ class GiftExchangeService {
             throw new Error('Cannot match: Only 1 person in the non-Core group.');
         }
 
-        // Check matchability
-        if (corePool.length > 0 && !this._isPoolMatchable(corePool)) {
+        // Guaranteed matches are set aside; the draw fills in everyone else.
+        const open = pool => ({
+            givers: pool.filter(p => !fixed.some(f => f.giver === p)),
+            receivers: pool.filter(p => !fixed.some(f => f.receiver === p)),
+        });
+        const coreOpen = open(corePool);
+        const otherOpen = open(otherPool);
+
+        // Check matchability (a pool with guaranteed matches is judged by the draw itself)
+        if (coreOpen.givers.length === corePool.length && corePool.length > 0 && !this._isPoolMatchable(corePool)) {
             throw new Error('Cannot match Core families: All members are in the same family group. Please add people from different Core families.');
         }
-        if (otherPool.length > 0 && !this._isPoolMatchable(otherPool)) {
+        if (otherOpen.givers.length === otherPool.length && otherPool.length > 0 && !this._isPoolMatchable(otherPool)) {
             throw new Error('Cannot match non-Core group: All members are in the same family group. Please add people from different families.');
         }
 
         // Retry logic
         const maxRetries = 10;
-        let allAssignments = null;
+        let drawn = null;
 
         for (let retry = 0; retry < maxRetries; retry++) {
-            const coreAssignments = this._generateAssignments(corePool);
-            const otherAssignments = this._generateAssignments(otherPool);
+            const coreAssignments = this._generateAssignments(coreOpen.givers, coreOpen.receivers);
+            const otherAssignments = this._generateAssignments(otherOpen.givers, otherOpen.receivers);
 
             if (coreAssignments && otherAssignments) {
-                allAssignments = [...coreAssignments, ...otherAssignments];
+                drawn = [...coreAssignments, ...otherAssignments];
                 break;
             }
         }
 
-        if (!allAssignments) {
+        if (!drawn) {
+            if (fixed.length > 0) {
+                throw new Error('Couldn’t finish the draw around your guaranteed matches. Remove one in Settings, or add more people.');
+            }
             if (this.excludedPairs.size > 0) {
                 throw new Error('Couldn’t avoid all of last year’s matches with this group. Turn off “Avoid last year’s matches” in Settings, or add more people.');
             }
             throw new Error('Could not find valid assignments after 10 attempts. Try adding more people or checking constraints.');
         }
 
-        return allAssignments;
+        // Same order as before: Core families first, each in list order.
+        const all = [...fixed, ...drawn];
+        return [...corePool, ...otherPool].map(giver => all.find(a => a.giver === giver));
     }
 
     _isPoolMatchable(pool) {
@@ -196,11 +252,12 @@ class GiftExchangeService {
         return uniqueGroups.size > 1;
     }
 
-    _generateAssignments(pool) {
-        if (pool.length === 0) return [];
+    // Pairs each giver with one of the receivers (same number of each).
+    _generateAssignments(openGivers, openReceivers) {
+        if (openGivers.length === 0) return [];
 
-        let givers = [...pool];
-        let receivers = [...pool];
+        let givers = [...openGivers];
+        let receivers = [...openReceivers];
         let isValid = false;
         let attempts = 0;
         const maxAttempts = 2000;
@@ -1375,6 +1432,7 @@ class UIManager {
         this.STORAGE_KEY_TOUR_SEEN = 'giftExchange.tourSeen';
         this.STORAGE_KEY_SHOW_BAD_SANTA = 'giftExchange.showBadSanta';
         this.STORAGE_KEY_MUSIC = 'giftExchange.music';
+        this.STORAGE_KEY_GUARANTEED = 'giftExchange.guaranteedMatches';
         this.now = () => new Date();
 
         // Elements
@@ -1409,6 +1467,7 @@ class UIManager {
         this.showBadSantaToggle = document.getElementById('showBadSantaToggle');
         this.lastYearInput = document.getElementById('lastYearInput');
         this.repeatNote = document.getElementById('repeatNote');
+        this.guaranteedInput = document.getElementById('guaranteedInput');
         this.soundToggle = document.getElementById('soundToggle');
         this.musicToggle = document.getElementById('musicToggle');
         this.partyBtn = document.getElementById('partyBtn');
@@ -1683,6 +1742,34 @@ class UIManager {
             this.lastYearInput.value = this.matchHistory.getYear(this.exchangeYear() - 1)
                 .map(p => `${p.giver} -> ${p.receiver}`).join('\n');
         }
+
+        // Guaranteed matches: kept as typed, saved as soon as the box changes
+        if (this.guaranteedInput) {
+            try { this.guaranteedInput.value = localStorage.getItem(this.STORAGE_KEY_GUARANTEED) || ''; } catch (_) { }
+            this.guaranteedInput.addEventListener('change', () => this.saveGuaranteedMatches());
+        }
+    }
+
+    saveGuaranteedMatches() {
+        if (!this.guaranteedInput) return;
+        try {
+            if (this.guaranteedInput.value.trim()) {
+                localStorage.setItem(this.STORAGE_KEY_GUARANTEED, this.guaranteedInput.value);
+            } else {
+                localStorage.removeItem(this.STORAGE_KEY_GUARANTEED);
+            }
+        } catch (_) { }
+    }
+
+    // The guaranteed matches typed in Settings. A line that is not "Giver -> Receiver"
+    // is an error, never skipped: a guarantee must not be dropped silently.
+    guaranteedMatches() {
+        const lines = (this.guaranteedInput ? this.guaranteedInput.value : '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        return lines.map(line => {
+            const [pair] = parseMatchLines(line);
+            if (!pair) throw new Error(`Guaranteed match not understood: “${line}”. Write it as Giver -> Receiver.`);
+            return pair;
+        });
     }
 
     // CSS hides the mode switch and the game while body has .bad-santa-off,
@@ -1788,6 +1875,8 @@ class UIManager {
             } catch (_) { }
         }
 
+        this.saveGuaranteedMatches();
+
         // Save last year's matches + the avoid-repeats choice
         if (this.lastYearInput) {
             this.matchHistory.saveYear(this.exchangeYear() - 1, parseMatchLines(this.lastYearInput.value));
@@ -1865,6 +1954,7 @@ class UIManager {
                 ? this.matchHistory.getYear(this.exchangeYear() - 1)
                 : [];
             this.exchangeService.setExcludedPairs(avoiding);
+            this.exchangeService.setFixedPairs(this.guaranteedMatches());
 
             // Pre-calculate to catch errors early
             const assignments = this.exchangeService.shuffleAndAssign();

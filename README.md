@@ -71,6 +71,7 @@ The easiest way to use this application is to simply open it in your web browser
 - **Core Families** (configurable via **Settings**) will only be matched with each other
 - **Everyone else** will only be matched within their own group
 - **Family members** from the same family group will never be matched together
+- **Guaranteed matches** (optional, in **Settings**): write one per line as `Sam Smith -> Jo Jones` and Sam will always buy for Jo. A guaranteed match wins over the family-group and last-year rules; everyone else is still drawn at random
 
 ---
 

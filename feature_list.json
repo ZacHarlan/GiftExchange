@@ -266,5 +266,13 @@
     "verification": "npx jest tests/unit/analytics.test.js tests/architecture && npx playwright test tests/e2e/analytics.spec.js",
     "priority": 34,
     "passes": true
+  },
+  {
+    "id": "guaranteed-matches",
+    "category": "functional",
+    "description": "Guaranteed matches: Settings has a box, one \"Giver -> Receiver\" per line (giftExchange.guaranteedMatches, saved as soon as it changes). GiftExchangeService.setFixedPairs keeps those pairs in every draw, over the family-group and last-year rules, and draws everyone else at random. The draw stops with a clear message for a line that is not understood, a name not on the list, a self-match, a giver or receiver used twice, or a pair that crosses the Core families boundary.",
+    "verification": "npx jest tests/unit/guaranteed-matches.test.js && npx playwright test tests/e2e/guaranteed-matches.spec.js",
+    "priority": 35,
+    "passes": true
   }
 ]
