@@ -140,3 +140,5 @@ DECISIONS (mine, owner not asked):
            unparsed line, name not on the list, self-match, giver/receiver used twice, Core/non-Core pair.
          - No on-screen note that a draw had guarantees, so the organiser can keep it quiet.
 TESTS  : unit+arch 203 -> 223; e2e 17 -> 18.
+         CI: ubuntu-latest moved to 26.04 and Playwright 1.57 cannot install there, so PR #18 failed at
+         'playwright install'. Upgraded @playwright/test to 1.65.1 (workflow untouched; it is a sensitive path).
