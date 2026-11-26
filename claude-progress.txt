@@ -127,3 +127,18 @@ NEXT   : owner supplies the G-XXXXXXXXXX id -> set GA_MEASUREMENT_ID -> PR + mer
          AnalyticsService accepts GTM- and G- ids. unit+arch 203.
          2026-11-17 later still: PR #16 merged and confirmed live (gtm.js 200, page_view 204 to G-PE51JMC1XH).
          Owner asked for a visible note: #privacyNote at the bottom of the card (feat/analytics-note). e2e 17.
+
+--- 2026-11-26  claude-fable-5-2 / guaranteed matches (feat/guaranteed-matches) ---
+DONE   : Owner asked for a way to guarantee that one person buys for a specific other person.
+         Settings box #guaranteedInput ("Giver -> Receiver" per line, parsed by parseMatchLines, saved on
+         change as giftExchange.guaranteedMatches). GiftExchangeService.setFixedPairs + _resolveFixedPairs:
+         fixed pairs are set aside, the rest is drawn from the remaining givers/receivers
+         (_generateAssignments now takes givers and receivers separately). Result order unchanged.
+DECISIONS (mine, owner not asked):
+         - A guarantee wins over the same-family and last-year rules.
+         - Anything wrong stops the draw with a message instead of silently dropping the guarantee:
+           unparsed line, name not on the list, self-match, giver/receiver used twice, Core/non-Core pair.
+         - No on-screen note that a draw had guarantees, so the organiser can keep it quiet.
+TESTS  : unit+arch 203 -> 223; e2e 17 -> 18.
+         CI: ubuntu-latest moved to 26.04 and Playwright 1.57 cannot install there, so PR #18 failed at
+         'playwright install'. Upgraded @playwright/test to 1.65.1 (workflow untouched; it is a sensitive path).
