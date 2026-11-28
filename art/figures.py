@@ -291,17 +291,46 @@ def grid_cloth(name, width, length, nx, ny, origin, pin, hole=None):
     return o
 
 
-def skirt_cloth(name, top_z, top_r, hem_z, hem_r, center, segs=96, rows=46, pleats=11, depth=0.07):
-    """A tube of cloth, a little flared and gathered into soft pleats, held at the waist."""
+def waist_outline(body, z, segs=96, ease=0.014):
+    """The outline of the torso at height z: its centre, and how far the body reaches from it in
+    each of `segs` directions (plus a little ease, so cloth lies on it rather than in it)."""
+    torso = weights(body, ["hips", "spine", "chest"])
+    band = [v.co for v in body.data.vertices if abs(v.co.z - z) < 0.03 and torso[v.index] > 0.5]
+    cx = (min(v.x for v in band) + max(v.x for v in band)) / 2
+    cy = (min(v.y for v in band) + max(v.y for v in band)) / 2
+    reach = [0.0] * segs
+    for v in band:
+        a = math.atan2(v.y - cy, v.x - cx) % (2 * math.pi)
+        k = int(a / (2 * math.pi) * segs) % segs
+        reach[k] = max(reach[k], math.hypot(v.x - cx, v.y - cy))
+    known = [r for r in reach if r > 0]
+    typical = sum(known) / len(known)
+    reach = [r if r > 0 else typical for r in reach]
+    for _ in range(4):                                              # even out the jitter between neighbours
+        reach = [(reach[k - 1] + 2 * reach[k] + reach[(k + 1) % segs]) / 4 for k in range(segs)]
+    return (cx, cy), [r + ease for r in reach]
+
+
+def smoothstep01(t):
+    t = max(0.0, min(1.0, t))
+    return t * t * (3 - 2 * t)
+
+
+def skirt_cloth(name, body, top_z, hem_z, hem_r, segs=96, rows=50, pleats=11, depth=0.07):
+    """The skirt of a tunic. Its top edge follows the wearer's own waist, held there as a belt
+    would hold it, so body and robe are one continuous garment; below that it widens into
+    soft pleats and is left to fall. Returns (cloth, the waist ring for the belt)."""
+    (cx, cy), waist = waist_outline(body, top_z, segs)
     verts, faces = [], []
     for r in range(rows + 1):
         f = r / rows
         z = top_z + (hem_z - top_z) * f
-        base = top_r + (hem_r - top_r) * f ** 0.8
+        open_out = smoothstep01(f / 0.3)                           # snug at the belt, full by the hips
         for s in range(segs):
             a = 2 * math.pi * s / segs
-            rad = base * (1 + depth * min(1.0, f * 4) * math.sin(pleats * a + 0.7 * math.sin(3 * a)))
-            verts.append((center[0] + rad * math.cos(a), center[1] + rad * 0.86 * math.sin(a), z))
+            full = (waist[s] + (hem_r - waist[s]) * f ** 0.8) * (1 + depth * math.sin(pleats * a + 0.7 * math.sin(3 * a)))
+            rad = waist[s] * (1 - open_out) + max(full, waist[s]) * open_out
+            verts.append((cx + rad * math.cos(a), cy + rad * math.sin(a), z))
     for r in range(rows):
         for s in range(segs):
             a, b = r * segs + s, r * segs + (s + 1) % segs
@@ -310,8 +339,10 @@ def skirt_cloth(name, top_z, top_r, hem_z, hem_r, center, segs=96, rows=46, plea
     me.from_pydata(verts, [], faces)
     o = bpy.data.objects.new(name, me)
     bpy.context.collection.objects.link(o)
-    o.vertex_groups.new(name="Pin").add(list(range(segs * 2)), 1.0, "REPLACE")
-    return o
+    o.vertex_groups.new(name="Pin").add(list(range(segs * 3)), 1.0, "REPLACE")
+    ring = [(cx + (waist[s] + 0.006) * math.cos(2 * math.pi * s / segs), cy + (waist[s] + 0.006) * math.sin(2 * math.pi * s / segs), top_z - 0.02)
+            for s in range(0, segs, 6)]
+    return o, ring
 
 
 def make_cloth(o, stiffness=10.0, bending=0.35, mass=0.22):
@@ -362,8 +393,8 @@ def polish(objs):
     for o in objs:
         if o.type != "MESH":
             continue
-        if o.name.split(".")[0] in ("Scalp", "Beard"):
-            add_bump(o.data.materials[0], scale=260.0, strength=0.35, detail=2.0) if not o.data.materials[0].get("bumped") else None
+        if o.name.split(".")[0] in ("Scalp", "Beard") and not o.data.materials[0].get("bumped"):
+            add_bump(o.data.materials[0], scale=190.0, strength=0.5, detail=3.0, distortion=1.5)
             o.data.materials[0]["bumped"] = True
         for m in [m for m in o.modifiers if m.type == "COLLISION"]:
             o.modifiers.remove(m)
@@ -504,9 +535,9 @@ def head_wrap(body, mat, rng, loops=6):
     return made + [cap]
 
 
-def rope_belt(z, rx, ry, y, mat):
-    pts = [(rx * math.cos(a), y + ry * math.sin(a), z) for a in [2 * math.pi * k / 16 for k in range(16)]]
-    o = curve_tube("Belt", pts, 0.012, resolution=6, closed=True)
+def rope_belt(ring, mat):
+    """A cord tied round the waist, lying on the cloth all the way round."""
+    o = curve_tube("Belt", ring, 0.012, resolution=6, closed=True)
     o.data.materials.append(mat)
     return o
 
@@ -576,8 +607,8 @@ def pose_praying(rig):
     bow(rig, spine=9, chest=7, neck=10, head=9)
     for side, sx in (("L", 1), ("R", -1)):
         s = shoulder(rig, side)
-        w = reach(rig, side, (sx * 0.018, s.y - 0.21, s.z - 0.14), (sx * 0.5, 0.25, -1.0))
-        aim(rig, f"hand.{side}", Vector((sx * 0.006, w.y - 0.07, w.z + 0.2)))
+        w = reach(rig, side, (sx * 0.02, s.y - 0.2, s.z - 0.26), (sx * 0.55, 0.3, -1.0))
+        aim(rig, f"hand.{side}", Vector((sx * 0.004, w.y - 0.09, w.z + 0.17)))
     return {"kneel": True}
 
 
@@ -607,7 +638,7 @@ def pose_elder(rig):
 
 def figure(name, kind, pose, look, mats, seed=1):
     """One dressed person. `look`: skin, tunic, mantle (None | ("head"|"shoulders", width, length,
-    material)), hair / beard (material names or None), fleece (the mantle is a sheepskin), wrap
+    material)), hair / beard (material names or None), wrap
     (material of a head wrap or None), skirt_hem (radius)."""
     import random
     rng = random.Random(seed)
@@ -637,12 +668,11 @@ def figure(name, kind, pose, look, mats, seed=1):
     collide(top)
     waist_z = 0.635 * H - drop
     kneeling = bool(info.get("kneel"))
-    skirt = skirt_cloth("Skirt", waist_z + 0.03, 0.205, -0.22 if kneeling else 0.02, look.get("skirt_hem", 0.32),
-                        (0, 0.05 if kneeling else 0.02, 0))
+    skirt, ring = skirt_cloth("Skirt", top, waist_z + 0.02, -0.22 if kneeling else 0.02, look.get("skirt_hem", 0.32))
     make_cloth(skirt, stiffness=7.5, bending=0.1 if kneeling else 0.28)
     settle([skirt], 55)
     assign(skirt, mats[look["tunic"]])
-    rope_belt(waist_z + 0.01, 0.2, 0.168, 0.05 if kneeling else 0.02, mats["rope"])
+    rope_belt(ring, mats["rope"])
 
     mantle = None
     if look.get("mantle"):
@@ -665,12 +695,8 @@ def figure(name, kind, pose, look, mats, seed=1):
         assign(mantle, mats[mat])
     bpy.data.objects.remove(floor, do_unlink=True)
 
-    if look.get("hair"):
-        strands(caps[0], mats[look["hair"]], 3600, look.get("hair_length", 0.011), curl=look.get("curl", 0.0), seed=seed)
-    if look.get("beard"):
-        strands(caps[-1], mats[look["beard"]], 2400, look.get("beard_length", 0.008), children=22, seed=seed + 1)
-    if look.get("fleece") and mantle:
-        strands(mantle, mats[look["fleece"]], 9000, 0.014, children=16, seed=seed + 2, thickness=0.005)
+    # Hair and beards are close caps with a combed grain (see polish()): loose strands at this
+    # size turned into bushes, and a strand "fleece" into spikes.
     if look.get("wrap"):
         head_wrap(body, mats[look["wrap"]], rng)
     if info.get("staff") is not None:
@@ -710,15 +736,13 @@ CAST = [
     # name, body, pose, look, seed
     ("Mary", "female", pose_mary, dict(skin="skin_fair", tunic="linen", mantle=("head", 1.34, 1.9, "wool_blue"),
                                        hair="hair_dark"), 11),
-    ("Joseph", "male", pose_joseph, dict(skin="skin", tunic="wool_brown", mantle=("shoulders", 1.25, 1.5, "wool_ochre"),
+    ("Joseph", "male", pose_joseph, dict(skin="skin", tunic="wool_brown", mantle=("head", 1.36, 1.55, "wool_ochre"),
                                          hair="hair_dark", beard="hair_dark"), 12),
-    ("Shepherd", "male", pose_praying, dict(skin="skin", tunic="wool_grey", mantle=("shoulders", 1.2, 1.25, "wool_cream"),
-                                            fleece="fleece", hair="hair_brown",
-                                            beard="hair_brown"), 13),
-    ("Youth", "male", pose_youth, dict(skin="skin_fair", tunic="wool_ochre", mantle=("shoulders", 1.1, 1.1, "wool_rust"),
-                                       hair="hair_dark", wrap="wool_rust"), 14),
-    ("Elder", "male", pose_elder, dict(skin="skin_old", tunic="wool_dark", mantle=("shoulders", 1.3, 1.5, "wool_grey"),
-                                       hair="hair_grey", beard="hair_grey", wrap="linen"), 15),
+    # The shepherds wear the plain belted tunic of working men, heads wrapped against the cold.
+    # (Cloaks draped over their bent arms came out torn, so they go without.)
+    ("Shepherd", "male", pose_praying, dict(skin="skin", tunic="wool_grey", hair="hair_brown", beard="hair_brown"), 13),
+    ("Youth", "male", pose_youth, dict(skin="skin_fair", tunic="wool_ochre", hair="hair_dark", wrap="wool_rust"), 14),
+    ("Elder", "male", pose_elder, dict(skin="skin_old", tunic="wool_brown", hair="hair_grey", beard="hair_grey", wrap="linen"), 15),
 ]
 
 
