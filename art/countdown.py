@@ -18,6 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import *  # noqa: E402,F403
+import animals  # noqa: E402  (the sheep)
 import figures  # noqa: E402  (Mary, Joseph and the shepherds)
 
 from mathutils import Euler, Matrix, noise  # noqa: E402
@@ -525,19 +526,64 @@ def shelter(mats, rng):
         x = -W / 2 - 0.2 + (W + 0.4) * i / (n - 1) + rng.uniform(-0.08, 0.08)
         tube("Rafter", [(x, front - 0.55 - rng.uniform(0, 0.25), ROOF + 0.02), (x + rng.uniform(-0.05, 0.05), (front + back) / 2, ROOF + 0.36),
                         (x, back + 0.35, ROOF + 0.66)], 0.045, mats["timber"])
-    # Brushwood and reed laid over the rafters.
+    # Reed thatch over the whole roof: a bed of brushwood on the rafters, then reeds laid down
+    # the slope in overlapping courses, their ends hanging over the eaves on every side.
     cy, cz = (front + back) / 2 - 0.1, ROOF + 0.45
     slope = math.atan2(0.62, back - front)
-    roof = cube("Thatch", (W + 0.7, back - front + 1.0, 0.16), (0, cy, cz), bevel=0.06)
-    smooth(roof, subsurf=1)
-    turn(roof, (0, cy, cz), (slope, 0, 0))
-    assign(roof, mats["thatch"])
-    strands(roof, mats["thatch"], 34000, 0.3, seed=4, children=3, thickness=0.014, random_dir=0.5)
-    for i in range(80):
-        x = rng.uniform(-W / 2 - 0.5, W / 2 + 0.5)
-        y0 = front - 0.5 - rng.uniform(0.0, 0.45)
-        tube("Brush", [(x, y0, ROOF + 0.08 + rng.uniform(-0.05, 0.03)), (x + rng.uniform(-0.2, 0.2), y0 + rng.uniform(0.9, 1.8), ROOF + 0.42)],
-             rng.uniform(0.008, 0.02), mats["timber"], resolution=3)
+    rw, rd = W + 0.9, back - front + 1.1
+    bed = cube("ThatchBed", (rw, rd, 0.14), (0, cy, cz), bevel=0.05)
+    turn(bed, (0, cy, cz), (slope, 0, 0))
+    assign(bed, mats["thatch"])
+    nx, ny = 60, 36
+    verts, faces = [], []
+    for j in range(ny + 1):
+        for i in range(nx + 1):
+            verts.append((-rw / 2 + rw * i / nx, -rd / 2 + rd * j / ny, 0.09 + 0.02 * noise.noise(Vector((i * 0.35, j * 0.35, 2.0)))))
+    for j in range(ny):
+        for i in range(nx):
+            a_ = j * (nx + 1) + i
+            faces.append((a_, a_ + 1, a_ + nx + 2, a_ + nx + 1))
+    reeds = mesh_object("Thatch", verts, faces)
+    reeds.location = (0, cy, cz)
+    reeds.rotation_euler = (slope, 0, 0)
+    assign(reeds, mats["thatch"])
+    reeds.modifiers.new("Reeds", "PARTICLE_SYSTEM")
+    pt = reeds.particle_systems[0].settings
+    pt.type = "HAIR"
+    pt.count = 52000
+    pt.hair_length = 0.75
+    pt.emit_from = "FACE"
+    pt.distribution = "RAND"                       # evenly over every part of the roof
+    pt.use_advanced_hair = True
+    pt.normal_factor = 0.012                       # lying almost flat ...
+    pt.object_align_factor = (0.0, -0.1, 0.0)      # ... pointing down the slope to the front eave
+    pt.factor_random = 0.022
+    pt.child_type = "SIMPLE"
+    pt.rendered_child_count = 4
+    pt.child_radius = 0.05
+    pt.root_radius, pt.tip_radius, pt.radius_scale = 1.0, 0.6, 0.011
+    pt.material_slot = mats["thatch"].name
+    reeds.data.materials.append(mats["straw"])
+    # A looser fringe along the eaves and gable ends.
+    fringe = reeds.modifiers.new("Fringe", "PARTICLE_SYSTEM")
+    edge = [v.index for v in reeds.data.vertices if abs(v.co.x) > rw / 2 - 0.25 or abs(v.co.y) > rd / 2 - 0.25]
+    reeds.vertex_groups.new(name="Edge").add(edge, 1.0, "REPLACE")
+    reeds.particle_systems[1].vertex_group_density = "Edge"
+    pf = reeds.particle_systems[1].settings
+    pf.type = "HAIR"
+    pf.count = 9000
+    pf.hair_length = 0.5
+    pf.emit_from = "FACE"
+    pf.distribution = "RAND"
+    pf.use_advanced_hair = True
+    pf.normal_factor = 0.02
+    pf.factor_random = 0.06
+    pf.object_align_factor = (0.0, -0.04, -0.03)
+    pf.child_type = "SIMPLE"
+    pf.rendered_child_count = 3
+    pf.child_radius = 0.05
+    pf.root_radius, pf.tip_radius, pf.radius_scale = 1.0, 0.6, 0.011
+    pf.material_slot = mats["thatch"].name
     # Trodden earth and straw underfoot, a heap of hay in the corner.
     floor = sphere("Floor", 1.0, (0, 0.75, -0.02), scale=(W / 2 + 0.3, 2.1, 0.05), segments=48)
     assign(floor, mats["earth"])
@@ -627,49 +673,6 @@ def house(mats, rng, w, d, h):
 # ---------------------------------------------------------------------------
 # Animals
 # ---------------------------------------------------------------------------
-
-def sheep(mats, rng, lying=False, lamb=False):
-    """An Awassi sheep, the old breed of the region: cream fleece, brown face and legs, drooping
-    ears, a broad fat tail. Returns the root object it hangs from."""
-    before = set(bpy.data.objects)
-    z0 = 0.24 if lying else 0.6
-    tex = bpy.data.textures.get("WoolLumps") or bpy.data.textures.new("WoolLumps", "CLOUDS")
-    tex.noise_scale = 0.06
-    tex.noise_depth = 2
-
-    def woolly(name, radius, loc, scale, tilt=0.0):
-        o = sphere(name, radius, loc, scale=scale, segments=48)
-        o.rotation_euler = (0, deg(tilt), 0)
-        lumps = o.modifiers.new("Wool", "DISPLACE")
-        lumps.texture = tex
-        lumps.strength = 0.045
-        lumps.mid_level = 0.4
-        assign(o, mats["wool"])
-        return o
-
-    woolly("Body", 1.0, (0, 0, z0), (0.4, 0.215, 0.225))
-    woolly("Chest", 1.0, (0.22, 0, z0 + 0.02), (0.2, 0.19, 0.21))
-    woolly("Rump", 1.0, (-0.24, 0, z0 + 0.01), (0.19, 0.2, 0.2))
-    woolly("Neck", 1.0, (0.37, 0, z0 + 0.13), (0.11, 0.1, 0.17), tilt=-28)
-    woolly("Tail", 1.0, (-0.42, 0, z0 - 0.07), (0.07, 0.085, 0.12))
-    hx, hz = 0.5, z0 + 0.25
-    head = sphere("Head", 1.0, (hx, 0, hz), scale=(0.135, 0.07, 0.078), segments=24)
-    head.rotation_euler = (0, deg(24), 0)
-    assign(head, mats["sheep_face"])
-    for sy in (-1, 1):
-        ear = sphere("Ear", 0.045, (hx - 0.07, sy * 0.082, hz + 0.0), scale=(0.75, 0.3, 1.45), segments=12)
-        ear.rotation_euler = (deg(sy * 30), 0, 0)
-        assign(ear, mats["sheep_face"])
-        assign(sphere("SheepEye", 0.012, (hx + 0.035, sy * 0.058, hz + 0.02), segments=8), mats["dark"])
-    if lying:
-        for sy in (-1, 1):                                              # forelegs folded under the chest
-            tube("Leg", [(0.2, sy * 0.1, 0.07), (0.36, sy * 0.11, 0.05), (0.3, sy * 0.13, 0.03)], 0.03, mats["sheep_face"], resolution=4)
-    else:
-        for x in (-0.25, 0.25):
-            for sy in (-1, 1):
-                tube("Leg", [(x, sy * 0.1, z0 - 0.1), (x + 0.012, sy * 0.1, 0.24), (x, sy * 0.1, 0.0)], 0.03, mats["sheep_face"], resolution=4)
-    return group(new_objects(before), scale=0.6 if lamb else 1.0)
-
 
 def with_children(root):
     return [root] + [o for o in bpy.data.objects if o.parent is not None and (o.parent is root or o.parent.parent is root)]
@@ -784,9 +787,9 @@ def land():
 
     # Sheep come in with the shepherds: a lamb near the manger, two ewes at the edge.
     for kind, loc, yaw in ((dict(lamb=True), (0.55, -1.5, 0.0), 118),
-                           (dict(), (-3.1, -0.9, 0.0), 12),
-                           (dict(), (3.25, -1.25, 0.0), 158)):
-        root = sheep(mats, rng, **kind)
+                           (dict(), (-3.15, -1.0, 0.0), 14),
+                           (dict(lying=True), (3.2, -1.45, 0.0), 162)):
+        root = animals.sheep(rng, **kind)
         root.location = loc
         root.rotation_euler = (0, 0, deg(yaw))
 
@@ -854,7 +857,7 @@ def land():
     # --- The shepherds' watch fire, out in the fields ------------------------------
     rng = random.Random(6)
     group(watch_fire(mats, rng), (FIRE.x, FIRE.y, FIRE_LEVEL))
-    flock = [into_collection(with_children(sheep(mats, rng, lying=lying)), f"Flock{i}") for i, lying in enumerate((False, True))]
+    flock = [into_collection(with_children(animals.sheep(rng, lying=lying)), f"Flock{i}") for i, lying in enumerate((False, True))]
     for i in range(14):
         a, r = rng.uniform(0, 6.28), rng.uniform(2.2, 7.5)
         x, y = FIRE.x + r * math.cos(a), FIRE.y + r * math.sin(a)

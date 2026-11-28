@@ -722,7 +722,7 @@ def figure_materials():
         "wool_cream": cloth_material("WoolCream", (0.62, 0.55, 0.42), stripe=(0.16, 0.1, 0.06)),
         "wool_blue": cloth_material("WoolBlue", (0.07, 0.12, 0.24)),
         "wool_brown": cloth_material("WoolBrown", (0.19, 0.1, 0.05)),
-        "wool_ochre": cloth_material("WoolOchre", (0.38, 0.23, 0.09), stripe=(0.12, 0.06, 0.03)),
+        "wool_ochre": cloth_material("WoolOchre", (0.38, 0.23, 0.09)),          # plain: bold stripes read as a costume
         "wool_grey": cloth_material("WoolGrey", (0.2, 0.18, 0.15)),
         "wool_rust": cloth_material("WoolRust", (0.3, 0.11, 0.05)),
         "wool_dark": cloth_material("WoolDark", (0.1, 0.075, 0.055), stripe=(0.3, 0.24, 0.16)),
