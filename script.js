@@ -750,6 +750,7 @@ AnalyticsService.EVENTS = {
     draw_names: ['participants', 'theme'],
     share: ['method'],
     tour_start: [],
+    countdown_open: [],
     theme_change: ['theme'],
 };
 // The only strings that may be sent as a parameter value.
@@ -2200,7 +2201,19 @@ if (typeof document !== 'undefined') {
         const exchangeService = new GiftExchangeService();
         const sound = new SoundService();
         const animationService = new AnimationService(sound);
-        new UIManager(exchangeService, animationService, undefined, undefined, sound, undefined, undefined, new MusicService(), new AnalyticsService());
+        const ui = new UIManager(exchangeService, animationService, undefined, undefined, sound, undefined, undefined, new MusicService(), new AnalyticsService());
+
+        // Countdown to Christmas (countdown.js, loaded after this file) shares the sound service.
+        const countdownRoot = document.getElementById('countdownScreen');
+        if (countdownRoot && typeof CountdownUI !== 'undefined') {
+            new CountdownUI({
+                root: countdownRoot,
+                openers: [document.getElementById('countdownBtn')].filter(Boolean),
+                sound,
+                now: CountdownUI.clockFor(window.location.hash),
+                onOpen: () => ui.analytics.track('countdown_open'),
+            });
+        }
     });
 }
 

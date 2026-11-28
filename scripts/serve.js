@@ -20,7 +20,7 @@ const MIME = {
     '.ico': 'image/x-icon',
 };
 // Only app files are servable — never tests, configs, art sources, or node_modules.
-const SERVABLE = new Set(['index.html', 'script.js', 'bad-santa.js', 'style.css']);
+const SERVABLE = new Set(['index.html', 'script.js', 'bad-santa.js', 'countdown.js', 'style.css']);
 const ASSET = /^assets\/[a-z0-9-]+\.(webp|mp3)$/;
 
 function resolveRequest(urlPath) {

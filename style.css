@@ -2165,3 +2165,363 @@ body.bad-santa-off #modeSwitch {
         transition: none;
     }
 }
+
+/* ==========================================================================
+   Countdown to Christmas — full-screen winter night (countdown.js)
+   Sizes hang off --u so the whole screen scales from a phone to a TV.
+   ========================================================================== */
+
+.countdown-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 999px;
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text);
+    background: linear-gradient(135deg, rgba(31, 154, 85, 0.35), rgba(224, 49, 63, 0.3));
+    border: 1px solid var(--card-edge);
+    box-shadow: 0 0 18px rgba(245, 196, 90, 0.18);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.countdown-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 26px rgba(245, 196, 90, 0.4);
+}
+
+.countdown-btn-go {
+    color: var(--gold);
+    font-size: 1.2em;
+    line-height: 1;
+}
+
+body[data-theme="hanukkah"] .countdown-btn {
+    display: none;
+}
+
+body.countdown-open {
+    overflow: hidden;
+}
+
+.countdown {
+    --u: min(1vw, 1.85vh);
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    overflow: hidden;
+    background: #050a1f;
+    color: #fff7ea;
+    font-family: var(--font-body);
+    animation: cdFadeIn 0.9s ease both;
+}
+
+.countdown.idle {
+    cursor: none;
+}
+
+.countdown-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.countdown-front {
+    pointer-events: none;
+}
+
+.countdown-tree {
+    position: absolute;
+    left: 50%;
+    bottom: 1.5%;
+    height: 44%;
+    width: auto;
+    max-width: 118%;
+    object-fit: contain;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 0 calc(var(--u) * 2.4) rgba(255, 205, 120, 0.35));
+    /* Fade the picture's own soft shadow into the snow so no edge shows */
+    -webkit-mask-image: linear-gradient(90deg, transparent 4%, #000 14%, #000 86%, transparent 96%), linear-gradient(180deg, #000 84%, transparent 97%);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(90deg, transparent 4%, #000 14%, #000 86%, transparent 96%), linear-gradient(180deg, #000 84%, transparent 97%);
+    mask-composite: intersect;
+    pointer-events: none;
+    user-select: none;
+}
+
+.countdown-content {
+    position: absolute;
+    inset: 0 0 auto 0;
+    padding-top: calc(var(--u) * 3.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    pointer-events: none;
+}
+
+.countdown-eyebrow {
+    margin: 0;
+    font-size: calc(var(--u) * 1.05);
+    font-weight: 600;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: #f5c45a;
+    text-shadow: 0 0 calc(var(--u) * 1) rgba(245, 196, 90, 0.6);
+}
+
+.countdown-title {
+    margin: calc(var(--u) * 0.1) 0 calc(var(--u) * 1.3);
+    font-family: var(--font-script);
+    font-weight: 400;
+    font-size: calc(var(--u) * 6.2);
+    line-height: 1.15;
+    color: #ffe9b0;
+    background: linear-gradient(100deg, #f5c45a 0%, #fff6d8 30%, #f5c45a 55%, #fff6d8 80%, #f5c45a 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 calc(var(--u) * 1.1) rgba(255, 190, 90, 0.55));
+    animation: cdShimmer 7s linear infinite;
+}
+
+.countdown-clock {
+    display: flex;
+    justify-content: center;
+    gap: calc(var(--u) * 1.5);
+}
+
+.cd-unit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(var(--u) * 0.6);
+}
+
+.cd-digits {
+    display: flex;
+    gap: calc(var(--u) * 0.45);
+    font-size: calc(var(--u) * 8);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.cd-label {
+    font-size: calc(var(--u) * 1.05);
+    font-weight: 600;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: #f5c45a;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+.cd-card {
+    position: relative;
+    display: block;
+    width: 0.74em;
+    height: 1.24em;
+    border-radius: 0.09em;
+    perspective: 4em;
+    color: #fff3d6;
+    text-shadow: 0 0.02em 0.04em rgba(60, 0, 8, 0.6);
+    box-shadow:
+        0 0 0 0.012em rgba(245, 196, 90, 0.75),
+        0 0.1em 0.28em rgba(0, 0, 0, 0.55),
+        0 0 0.5em rgba(224, 49, 63, 0.25);
+}
+
+.cd-card::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(50% - 0.012em);
+    height: 0.024em;
+    background: rgba(40, 0, 6, 0.75);
+    z-index: 5;
+}
+
+.cd-half {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 50%;
+    overflow: hidden;
+    text-align: center;
+    backface-visibility: hidden;
+}
+
+.cd-top,
+.cd-flap-top {
+    top: 0;
+    line-height: 1.24em;
+    border-radius: 0.09em 0.09em 0 0;
+    background: linear-gradient(180deg, #d23545 0%, #a81c2c 100%);
+}
+
+.cd-bottom,
+.cd-flap-bottom {
+    bottom: 0;
+    line-height: 0;
+    border-radius: 0 0 0.09em 0.09em;
+    background: linear-gradient(180deg, #b82333 0%, #8a1221 100%);
+}
+
+.cd-flap-top {
+    z-index: 3;
+    transform-origin: bottom;
+    transform: rotateX(-90deg);
+}
+
+.cd-flap-bottom {
+    z-index: 2;
+    transform-origin: top;
+}
+
+.flip-a .cd-flap-top { animation: cdFoldA 0.3s ease-in both; }
+.flip-a .cd-flap-bottom { animation: cdUnfoldA 0.3s ease-out 0.3s both; }
+.flip-b .cd-flap-top { animation: cdFoldB 0.3s ease-in both; }
+.flip-b .cd-flap-bottom { animation: cdUnfoldB 0.3s ease-out 0.3s both; }
+
+@keyframes cdFoldA { from { transform: rotateX(0); filter: brightness(1); } to { transform: rotateX(-90deg); filter: brightness(0.6); } }
+@keyframes cdFoldB { from { transform: rotateX(0); filter: brightness(1); } to { transform: rotateX(-90deg); filter: brightness(0.6); } }
+@keyframes cdUnfoldA { from { transform: rotateX(90deg); filter: brightness(1.5); } to { transform: rotateX(0); filter: brightness(1); } }
+@keyframes cdUnfoldB { from { transform: rotateX(90deg); filter: brightness(1.5); } to { transform: rotateX(0); filter: brightness(1); } }
+@keyframes cdFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cdShimmer { from { background-position: 220% 0; } to { background-position: 0 0; } }
+
+.countdown-sleeps {
+    margin: calc(var(--u) * 1.5) 0 0;
+    font-family: var(--font-heading);
+    font-style: italic;
+    font-size: calc(var(--u) * 2.1);
+    color: #fff7ea;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.85), 0 0 calc(var(--u) * 1.5) rgba(10, 20, 60, 0.9);
+}
+
+.countdown-date {
+    margin: calc(var(--u) * 0.35) 0 0;
+    font-size: calc(var(--u) * 1.1);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #cfdcff;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
+/* The last ten seconds: one enormous number */
+.countdown-big {
+    display: none;
+    margin: 0;
+    font-size: calc(var(--u) * 21);
+    font-weight: 700;
+    line-height: 1;
+    color: #fff3d6;
+    text-shadow: 0 0 calc(var(--u) * 3) rgba(255, 190, 90, 0.9), 0 0 calc(var(--u) * 8) rgba(224, 49, 63, 0.7);
+}
+
+.final-ten .countdown-big { display: block; }
+.final-ten .countdown-clock,
+.final-ten .countdown-sleeps,
+.final-ten .countdown-date { display: none; }
+.countdown-big.pop-a { animation: cdPopA 1s ease-out both; }
+.countdown-big.pop-b { animation: cdPopB 1s ease-out both; }
+@keyframes cdPopA { 0% { transform: scale(1.6); opacity: 0; } 18% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.92); opacity: 0.85; } }
+@keyframes cdPopB { 0% { transform: scale(1.6); opacity: 0; } 18% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.92); opacity: 0.85; } }
+
+.final-minute .cd-unit[data-unit="seconds"] .cd-card {
+    box-shadow:
+        0 0 0 0.012em rgba(255, 226, 150, 0.95),
+        0 0.1em 0.28em rgba(0, 0, 0, 0.55),
+        0 0 0.7em rgba(255, 190, 90, 0.75);
+}
+
+/* Christmas Day */
+.is-christmas .countdown-clock,
+.is-christmas .countdown-eyebrow,
+.is-christmas .countdown-date { display: none; }
+
+.is-christmas .countdown-title {
+    margin-top: calc(var(--u) * 5);
+    font-size: calc(var(--u) * 10.5);
+    animation: cdShimmer 4s linear infinite, cdArrive 1.6s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.is-christmas .countdown-sleeps {
+    font-size: calc(var(--u) * 2.6);
+}
+
+@keyframes cdArrive { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.countdown-controls {
+    position: absolute;
+    top: calc(var(--u) * 1.2);
+    right: calc(var(--u) * 1.2);
+    display: flex;
+    gap: 0.5rem;
+    transition: opacity 0.6s ease;
+}
+
+.countdown.idle .countdown-controls {
+    opacity: 0;
+}
+
+.countdown-controls:focus-within {
+    opacity: 1 !important;
+}
+
+.countdown-control {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 1.15rem;
+    line-height: 1;
+    color: #fff7ea;
+    background: rgba(8, 16, 44, 0.55);
+    border: 1px solid rgba(245, 196, 90, 0.5);
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+}
+
+.countdown-control:hover,
+.countdown-control:focus-visible {
+    background: rgba(245, 196, 90, 0.25);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(245, 196, 90, 0.6);
+}
+
+/* Tall, narrow screens: the clock becomes two rows of two */
+@media (max-aspect-ratio: 4/5) {
+    .countdown { --u: min(2.3vw, 1.05vh); }
+    .countdown-content { padding-top: calc(var(--u) * 7); }
+    .countdown-clock {
+        display: grid;
+        grid-template-columns: auto auto;
+        gap: calc(var(--u) * 2) calc(var(--u) * 2.4);
+    }
+    .countdown-tree { height: auto; width: 150%; max-width: none; bottom: 2%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .countdown,
+    .countdown-title,
+    .is-christmas .countdown-title,
+    .countdown-big.pop-a,
+    .countdown-big.pop-b,
+    .flip-a .cd-flap-top,
+    .flip-a .cd-flap-bottom,
+    .flip-b .cd-flap-top,
+    .flip-b .cd-flap-bottom {
+        animation: none;
+    }
+}
+
+@media print {
+    .countdown { display: none !important; }
+}

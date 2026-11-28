@@ -49,6 +49,7 @@ describe('dev server (scripts/serve.js)', () => {
     test('serves script.js, bad-santa.js and style.css with correct types', async () => {
         expect((await get(port, '/script.js')).type).toMatch(/javascript/);
         expect((await get(port, '/bad-santa.js')).type).toMatch(/javascript/);
+        expect((await get(port, '/countdown.js')).type).toMatch(/javascript/);
         expect((await get(port, '/style.css')).type).toMatch(/text\/css/);
     });
 
