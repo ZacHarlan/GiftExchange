@@ -2,8 +2,9 @@
 //
 //   ChristmasCountdown  pure date maths (no browser APIs; held to the domain rules)
 //   CountdownScene      the night: a starry sky and the Star of Bethlehem, drawn live, over a
-//                       rendered snowy valley with a chapel and the stable (Mary, Joseph and
-//                       the child in the manger), with the app's shared snow falling in front.
+//                       rendered picture of Bethlehem — an animal shelter of stone and timber
+//                       with Mary, Joseph, the child in a stone manger, shepherds and sheep,
+//                       and the village and Judean hills behind. No snow falls here.
 //   CountdownUI         the screen itself: flip clock, final-ten countdown, Christmas Day,
 //                       open/close, full screen, keeping the display awake.
 //
@@ -41,8 +42,8 @@ class ChristmasCountdown {
         };
     }
 
-    // How hard it is snowing, 0 (a light fall, 30 days or more away) to 1 (Christmas Eve night
-    // and Christmas Day). It rises a little every second of the last 30 days.
+    // How hard it is snowing on the gift picker, 0 (a light fall, 30 days or more away) to 1
+    // (Christmas Eve night and Christmas Day). It rises a little every second of the last 30 days.
     static snowLevel(state) {
         if (state.christmas) return 1;
         const span = 30 * 86400;
@@ -79,25 +80,21 @@ function countdownSeeded(seed) {
     };
 }
 
-// The rendered valley (art/countdown.py -> assets/countdown-land.webp): a 16:9 picture with a
-// transparent sky. `roof` and `manger` are where the stable's ridge and the manger sit in it, as
+// The rendered scene (art/countdown.py -> assets/countdown-land.webp): a 16:9 picture with a
+// transparent sky. `roof` and `manger` are where the shelter's roof and the manger sit in it, as
 // fractions of its width and height — the script prints them; the star hangs above the roof.
 const COUNTDOWN_LAND = {
     src: 'assets/countdown-land.webp',
     aspect: 16 / 9,
-    roof: [0.7731, 0.5899],
-    manger: [0.7879, 0.8559],
+    roof: [0.7050, 0.4176],
+    manger: [0.7141, 0.7137],
 };
 
 class CountdownScene {
-    // `back` holds the sky, the star and the valley; `front` holds the falling snow.
-    // `snow` is the app's shared snow renderer ({ layout, paint, setLevel }).
-    constructor(back, front, snow) {
-        this.back = back || null;
-        this.front = front || null;
+    // Everything is drawn on one canvas: the sky, the star, then the picture of Bethlehem.
+    constructor(canvas) {
+        this.back = canvas || null;
         this.b = CountdownScene.context(this.back);
-        this.f = CountdownScene.context(this.front);
-        this.snow = snow || null;
         this.w = 0;
         this.h = 0;
         this.glory = false;        // Christmas Day: the star at its brightest
@@ -123,24 +120,20 @@ class CountdownScene {
     }
 
     ready() {
-        return Boolean(this.b && this.f && this.w > 0 && this.h > 0);
+        return Boolean(this.b && this.w > 0 && this.h > 0);
     }
 
     setGlory(on) {
         this.glory = Boolean(on);
     }
 
-    setSnow(level) {
-        if (this.snow) this.snow.setLevel(level);
-    }
-
-    // Where the valley picture is drawn: it spans the screen and stands on its bottom edge. Its
-    // own sky is transparent, so on a tall screen it is kept smaller and the stable is centred,
+    // Where the picture is drawn: it spans the screen and stands on its bottom edge. Its own
+    // sky is transparent, so on a tall screen it is kept smaller and the shelter is centred,
     // leaving the top of the screen to the clock and the star.
     static place(w, h) {
         const { aspect, roof, manger } = COUNTDOWN_LAND;
         const wide = w / h >= 1.15;
-        const dh = Math.max(w / aspect, h * (wide ? 1 : 0.7));    // drawn height
+        const dh = Math.max(w / aspect, h * (wide ? 1 : 0.62));   // drawn height
         const dw = dh * aspect;
         const x = Math.min(0, Math.max(w - dw, w / 2 - roof[0] * dw));
         const centred = x + roof[0] * dw;
@@ -150,24 +143,21 @@ class CountdownScene {
             x, y, dw, dh,
             roof: { x: centred, y: roofY },
             manger: { x: x + manger[0] * dw, y: y + manger[1] * dh },
-            // The star stands high over the stable where there is open sky beside the clock,
+            // The star stands high over the shelter where there is open sky beside the clock,
             // and just above the roof on a tall screen, where the clock fills the top.
-            star: { x: centred, y: wide ? Math.max(h * 0.16, roofY - h * 0.37) : roofY - h * 0.11 },
+            star: { x: centred, y: wide ? Math.max(h * 0.13, roofY - h * 0.27) : roofY - h * 0.085 },
         };
     }
 
     resize(width, height, pixelRatio) {
-        if (!this.b || !this.f) return;
+        if (!this.b) return;
         const dpr = Math.min(2, Math.max(1, pixelRatio || 1));
         this.w = Math.max(1, Math.round(width));
         this.h = Math.max(1, Math.round(height));
         this.dpr = dpr;
-        for (const canvas of [this.back, this.front]) {
-            canvas.width = Math.round(this.w * dpr);
-            canvas.height = Math.round(this.h * dpr);
-        }
+        this.back.width = Math.round(this.w * dpr);
+        this.back.height = Math.round(this.h * dpr);
         this.b.setTransform(dpr, 0, 0, dpr, 0, 0);
-        this.f.setTransform(dpr, 0, 0, dpr, 0, 0);
         this.layout();
     }
 
@@ -176,7 +166,6 @@ class CountdownScene {
         const rnd = countdownSeeded(20261225);
         this.unit = Math.min(w, h * 1.7);
         this.at = CountdownScene.place(w, h);
-        if (this.snow) this.snow.layout(w, h);
 
         // Stars: many faint, a few bright; fewer close to the great star so it stands alone.
         this.stars = [];
@@ -202,10 +191,10 @@ class CountdownScene {
         c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         const g = c.createLinearGradient(0, 0, 0, h);
         g.addColorStop(0, '#02040f');
-        g.addColorStop(0.35, '#061029');
-        g.addColorStop(0.62, '#0e1d45');
-        g.addColorStop(0.8, '#1d2f63');
-        g.addColorStop(1, '#27396f');
+        g.addColorStop(0.3, '#050d24');
+        g.addColorStop(0.5, '#0b1838');
+        g.addColorStop(0.64, '#16264f');
+        g.addColorStop(1, '#16264f');
         c.fillStyle = g;
         c.fillRect(0, 0, w, h);
         c.save();
@@ -244,7 +233,7 @@ class CountdownScene {
     draw(t) {
         if (!this.ready()) return;
         this.lastT = t;
-        const { b, f, w, h, at } = this;
+        const { b, w, h, at } = this;
         b.globalAlpha = 1;
         b.globalCompositeOperation = 'source-over';
         b.drawImage(this.sky, 0, 0, w, h);
@@ -255,8 +244,6 @@ class CountdownScene {
             b.drawImage(this.land, at.x, at.y, at.dw, at.dh);
             this.drawLamplight(b, t);
         }
-        f.clearRect(0, 0, w, h);
-        if (this.snow) this.snow.paint(f, t);
     }
 
     drawStars(ctx, t) {
@@ -313,7 +300,7 @@ class CountdownScene {
         const reach = Math.max(1, roof.y - y);
         const foot = roof.y + reach * 0.12;
         const fall = ctx.createLinearGradient(0, y, 0, foot);
-        fall.addColorStop(0, `rgba(255,238,200,${0.05 * size})`);
+        fall.addColorStop(0, `rgba(255,238,200,${0.045 * size})`);
         fall.addColorStop(1, 'rgba(255,238,200,0)');
         ctx.fillStyle = fall;
         for (const spread of [0.03, 0.05, 0.075, 0.105]) {
@@ -368,7 +355,7 @@ class CountdownScene {
         ctx.restore();
     }
 
-    // The lantern in the stable breathes very slightly, like a real flame.
+    // The oil lamps breathe very slightly, like real flames.
     drawLamplight(ctx, t) {
         const { x, y } = this.at.manger;
         const flicker = 0.5 + 0.5 * Math.sin(t * 2.1) * Math.sin(t * 0.83 + 1.2);
@@ -385,9 +372,9 @@ class CountdownScene {
 
 class CountdownUI {
     // options: root (the #countdownScreen element), openers (buttons that open it and show the
-    // "N sleeps" teaser), sound ({ play(name) }), snow (the app's SnowField for this screen),
-    // now (() => Date), onOpen (called when opened), onSnowLevel (told how hard it is snowing,
-    // so the page behind can match), view (window; injected in tests).
+    // "N sleeps" teaser), sound ({ play(name) }), now (() => Date), onOpen (called when opened),
+    // onSnowLevel (told how hard it should be snowing on the gift picker behind; this screen
+    // itself has no snow), view (window; injected in tests).
     constructor(options) {
         this.root = options.root;
         this.openers = options.openers || [];
@@ -414,7 +401,7 @@ class CountdownUI {
         this.closeBtn = find('countdownClose');
         this.fullBtn = find('countdownFullscreen');
         this.verse = find('countdownVerse');
-        this.scene = new CountdownScene(find('countdownSky'), find('countdownSnow'), options.snow || null);
+        this.scene = new CountdownScene(find('countdownSky'));
         this.scene.onReady = () => { if (this.isOpen() && this.stillScene()) this.scene.draw(30); };
 
         this.units = {};
@@ -619,7 +606,6 @@ class CountdownUI {
         this.root.classList.toggle('final-ten', finalTen);
         this.root.classList.toggle('final-minute', !state.christmas && state.totalSeconds <= 60);
         this.scene.setGlory(state.christmas);
-        this.scene.setSnow(ChristmasCountdown.snowLevel(state));
 
         if (this.title) this.title.textContent = state.christmas ? 'Merry Christmas!' : 'Christmas is coming';
         if (this.sleeps) {

@@ -2109,7 +2109,7 @@ body.bad-santa-off #modeSwitch {
 }
 
 /* ==========================================================================
-   Countdown to Christmas — full-screen winter night (countdown.js)
+   Countdown to Christmas — full-screen Nativity scene (countdown.js)
    Sizes hang off --u so the whole screen scales from a phone to a TV.
    ========================================================================== */
 
@@ -2172,10 +2172,6 @@ body.countdown-open {
     width: 100%;
     height: 100%;
     display: block;
-}
-
-.countdown-front {
-    pointer-events: none;
 }
 
 /* The clock sits to the left, leaving open sky on the right for the star over the stable. */

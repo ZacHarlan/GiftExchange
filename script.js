@@ -678,10 +678,10 @@ class MusicService {
 
 // --- Snow ---
 
-// Falling snow, drawn on a canvas. One renderer for the whole app, so the gift picker and the
-// Christmas countdown show exactly the same snow: three depths of soft flakes drifting on a
-// light wind. setLevel(0..1) says how hard it is snowing (see ChristmasCountdown.snowLevel in
-// countdown.js: it grows steadily over the 30 days before Christmas).
+// Falling snow behind the gift picker, drawn on a canvas: three depths of soft flakes drifting
+// on a light wind. setLevel(0..1) says how hard it is snowing (see ChristmasCountdown.snowLevel
+// in countdown.js: it grows steadily over the 30 days before Christmas). The Christmas
+// countdown itself shows Bethlehem and has no snow.
 class SnowField {
     constructor(canvas) {
         this.canvas = canvas || null;
@@ -801,8 +801,8 @@ class SnowField {
         this.paint(this.ctx, t);
     }
 
-    // Runs the snow behind the page. It rests while `paused()` is true (the countdown, which
-    // draws its own copy, is covering the page) and stands still for reduced-motion visitors.
+    // Runs the snow behind the page. It rests while `paused()` is true (the countdown is
+    // covering the page) and stands still for reduced-motion visitors.
     run(view, paused = () => false) {
         if (!this.ctx || !view || !view.requestAnimationFrame) return;
         this.fit(view);
@@ -2347,7 +2347,7 @@ if (typeof document !== 'undefined') {
         const animationService = new AnimationService(sound);
         const ui = new UIManager(exchangeService, animationService, undefined, undefined, sound, undefined, undefined, new MusicService(), new AnalyticsService());
 
-        // The same snow falls behind this page and on the Christmas countdown.
+        // Snow falls behind this page (not on the Christmas countdown, which shows Bethlehem).
         const pageSnow = new SnowField(document.getElementById('snowCanvas'));
         pageSnow.run(window, () => document.hidden || document.body.classList.contains('countdown-open'));
 
@@ -2358,7 +2358,6 @@ if (typeof document !== 'undefined') {
                 root: countdownRoot,
                 openers: [document.getElementById('countdownBtn')].filter(Boolean),
                 sound,
-                snow: new SnowField(),
                 now: CountdownUI.clockFor(window.location.hash),
                 onOpen: () => ui.analytics.track('countdown_open'),
                 onSnowLevel: level => pageSnow.setLevel(level),

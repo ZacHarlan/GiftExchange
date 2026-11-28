@@ -183,3 +183,24 @@ DECISIONS (mine): stable right of centre with the clock on the left; snowy valle
 NOT DONE / KNOWN: the child in the manger is a swaddled bundle, not a modelled baby; faces are the base
          mesh's neutral face; no shepherds, animals or wise men.
 TESTS  : unit+arch 245 -> 256; e2e 21 -> 23.
+
+--- 2026-11-28  claude-fable-5-2 / historically accurate Nativity, no snow (feat/bethlehem-nativity) ---
+OWNER  : sent a painting of the Nativity (Mary, Joseph, shepherds, lamb, lantern) and asked to "build out
+         the nativity more ... historically accurate ... no snow ... maybe something more photo realistic".
+         Asked two questions; answers: the painting is a STYLE GUIDE ONLY (do not publish it), and snow goes
+         from the COUNTDOWN ONLY (the gift picker keeps its snow).
+DONE   : art/countdown.py rewritten as first-century Bethlehem: terraced hills, rock bank, dry-stone and
+         timber shelter with reed roof, stone manger with the swaddled child, clay oil lamps, olive trees,
+         cypresses, watch fire with flock, flat-roofed village. art/figures.py generalised: figure(name,
+         kind, pose, look) + CAST of five (Mary, Joseph, Shepherd, Youth, Elder); painted eyes, SSS skin,
+         hair/beard caps with short strands, woven-wool materials, shoulder mantles with a neck slot, head
+         wraps. countdown.js: single canvas, no snow; new COUNTDOWN_LAND anchors; phone layout 0.62.
+         (The previous snowy-valley script is in git history at PR #20.)
+HONEST LIMITS, told to the owner: I cannot reach portrait-quality faces like the painting; figures are kept
+         at about a fifth of the screen height where they hold up. Close up they look like mannequins.
+         The child is a swaddled bundle with a simple head. Sheep are simple rounded models.
+LESSONS: strand length in Blender follows emission speed -> keep normal+random factor constant
+         (countdown.strands). Sheep/olive strands look like spikes at this scale; modelled wool is better.
+         Blender occasionally dies at start with an NSException on macOS: just run it again.
+         A regex clean-up once removed `curl=0.0` from a def signature; check signatures after bulk edits.
+TESTS  : unit+arch 256; e2e 23.
