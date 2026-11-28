@@ -274,5 +274,13 @@
     "verification": "npx jest tests/unit/guaranteed-matches.test.js && npx playwright test tests/e2e/guaranteed-matches.spec.js",
     "priority": 35,
     "passes": true
+  },
+  {
+    "id": "christmas-countdown",
+    "category": "functional",
+    "description": "Countdown to Christmas (countdown.js): full-screen screen opened from #countdownBtn (which shows the sleeps left) or a #countdown link. Flip clock for days/hours/minutes/seconds in the viewer's time zone, a canvas night scene (stars, aurora, moon, Santa's sleigh, village, snow, twinkling tree lights), one big number for the last ten seconds, then Merry Christmas with fireworks for all of 25 December; from the 26th it counts to next year. F = full screen, Esc = close, controls hide when idle, display kept awake where supported, reduced-motion shows a still scene. #countdown=finale previews the last 20 seconds. Hidden in the Hanukkah theme.",
+    "verification": "npx jest tests/unit/countdown.test.js tests/architecture && npx playwright test tests/e2e/countdown.spec.js",
+    "priority": 36,
+    "passes": true
   }
 ]

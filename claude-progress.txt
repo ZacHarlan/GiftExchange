@@ -142,3 +142,17 @@ DECISIONS (mine, owner not asked):
 TESTS  : unit+arch 203 -> 223; e2e 17 -> 18.
          CI: ubuntu-latest moved to 26.04 and Playwright 1.57 cannot install there, so PR #18 failed at
          'playwright install'. Upgraded @playwright/test to 1.65.1 (workflow untouched; it is a sensitive path).
+
+--- 2026-11-28  claude-fable-5-2 / Countdown to Christmas (feat/christmas-countdown) ---
+DONE   : Owner asked for "the most amazing countdown to Christmas" screen. New countdown.js:
+         ChristmasCountdown (pure date maths, added to the DOMAIN rule list), CountdownScene (two canvases:
+         sky/aurora/moon/sleigh/village/snow behind assets/hero.webp, tree lights/near snow/fireworks in
+         front), CountdownUI (flip clock, final-ten number, Christmas Day, #countdown hash, full screen,
+         wake lock, idle controls). Wired at the bottom of script.js to share SoundService; analytics event
+         countdown_open added to the allowlist. serve.js SERVABLE and rules.js SOURCES list the new file.
+DECISIONS (mine):
+         - Christmas only: the button is hidden in the Hanukkah theme (no Hanukkah countdown yet).
+         - Local time zone; all of 25 Dec is "Merry Christmas", then it counts to next year.
+         - No new art rendered: the scene is drawn in code around the existing hero tree picture.
+         - #countdown=finale is a preview clock (20 s before midnight) so the ending can be seen any day.
+TESTS  : unit+arch 223 -> 245; e2e 18 -> 21. Checked by screenshot at 1600x900 and 390x844.

@@ -42,9 +42,9 @@ function classBodies(src) {
 
 const count = (text, re) => (text.match(new RegExp(re.source, 'g')) || []).length;
 
-const DOMAIN = ['Person', 'GiftExchangeService', 'BadSantaGame'];
+const DOMAIN = ['Person', 'GiftExchangeService', 'BadSantaGame', 'ChristmasCountdown'];
 // App source files scanned by every rule (script.js must come first).
-const SOURCES = ['script.js', 'bad-santa.js'];
+const SOURCES = ['script.js', 'bad-santa.js', 'countdown.js'];
 const BROWSER_GLOBALS = /\b(document|window|localStorage|sessionStorage|navigator|alert|confirm|setTimeout|setInterval)\b/;
 const STORAGE = /\b(localStorage|sessionStorage)\b/;
 const THIRD_PARTY = /googletagmanager|google-analytics|\bdataLayer\b|\bgtag\b|createElement\(\s*['"`]script/;

@@ -11,6 +11,7 @@ A simple web application to randomly assign gift exchange partners while respect
 - **Copy Results**: Easily copy the final assignments to share with participants
 - **Music & Sound**: Soft background music after your first click, and gentle bells during the shuffle. The 🎵 and 🔔 buttons (top right) turn each off
 - **Guided Tour**: New here? Click **How it works** (top left) for a one-minute walkthrough of the app
+- **Countdown to Christmas**: A full-screen winter night with a flip clock, northern lights, falling snow and Santa crossing the moon. Open it from the 🎄 button under the title, or add `#countdown` to the address to start on it (good for a TV); press **F** for full screen and **Esc** to close
 - **Bad Santa** (optional): A white elephant game mode. Turn it on in **Settings → Show Bad Santa**; it's hidden until you do
 
 ---

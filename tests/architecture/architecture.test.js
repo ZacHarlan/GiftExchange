@@ -95,4 +95,12 @@ describe('rule coverage', () => {
         const bodies = classBodies('class BadSantaGame {\n    x() { return document.title; }\n}\n');
         expect(rule.scan(bodies, '').BadSantaGame).toBe(1);
     });
+
+    test('ChristmasCountdown (the date maths) is held to the domain rules', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'countdown.js'), 'utf8');
+        expect(Object.keys(classBodies(src))).toContain('ChristmasCountdown');
+        const rule = RULES.find(r => r.id === 'domain-no-browser-apis');
+        const bodies = classBodies('class ChristmasCountdown {\n    x() { return window.innerWidth; }\n}\n');
+        expect(rule.scan(bodies, '').ChristmasCountdown).toBe(1);
+    });
 });
