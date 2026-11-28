@@ -7,7 +7,7 @@ test.describe('Countdown to Christmas', () => {
         page.on('pageerror', e => errors.push(e.message));
         const land = page.waitForResponse(r => /assets\/countdown-land\.webp/.test(r.url()));
         await page.goto('/');
-        expect((await land).status()).toBe(200);      // the rendered valley with the Nativity
+        expect((await land).status()).toBe(200);      // the rendered picture of Bethlehem and the Nativity
         await expect(page.locator('#countdownBtn')).toContainText('27 sleeps until Christmas');
         await expect(page.locator('#countdownScreen')).toBeHidden();
 
@@ -56,27 +56,23 @@ test.describe('Countdown to Christmas', () => {
         await expect(page.locator('#countdownClock')).toBeHidden();
     });
 
-    test('the same snow falls behind the gift picker and on the countdown', async ({ page }) => {
+    test('snow falls behind the gift picker but not over Bethlehem', async ({ page }) => {
         await page.clock.install({ time: new Date(2026, 11, 20, 18, 0, 0) });
         await page.goto('/');
-        // Count lit pixels on a canvas: only snow is ever drawn on these two.
-        const lit = id => page.evaluate(canvasId => {
-            const c = document.getElementById(canvasId);
+        await page.clock.runFor(500);
+        const lit = await page.evaluate(() => {
+            const c = document.getElementById('snowCanvas');
             const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
             let n = 0;
             for (let i = 3; i < data.length; i += 4) if (data[i] > 40) n++;
             return n / (c.width * c.height);
-        }, id);
-        await page.clock.runFor(500);
-        const pageSnow = await lit('snowCanvas');
-        expect(pageSnow).toBeGreaterThan(0.0005);
+        });
+        expect(lit).toBeGreaterThan(0.0005);              // it is snowing on the gift picker
 
         await page.click('#countdownBtn');
-        await page.clock.runFor(500);
-        const countdownSnow = await lit('countdownSnow');
-        // Same renderer, same snow level, same window: the same share of the screen is snow.
-        expect(countdownSnow / pageSnow).toBeGreaterThan(0.8);
-        expect(countdownSnow / pageSnow).toBeLessThan(1.25);
+        await expect(page.locator('#countdownScreen')).toBeVisible();
+        await expect(page.locator('#countdownScreen canvas')).toHaveCount(1);   // just the scene: no snow layer
+        await expect(page.locator('#countdownSnow')).toHaveCount(0);
     });
 
     test('snow is heavier close to Christmas than a month before', async ({ browser }) => {

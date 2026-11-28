@@ -1,10 +1,16 @@
 """Countdown-to-Christmas scenery, rendered for countdown.js:
 
-  countdown-land.png   a starlit winter valley (transparent sky): a chapel and cabins among snowy
-                       firs, and in the foreground a stable with the Nativity, glowing from within.
+  countdown-land.png   Bethlehem on the night of the Nativity (transparent sky): an animal
+                       shelter of rough limestone and timber against a rocky bank, lit by clay oil
+                       lamps — Mary, Joseph and the child in a stone manger, three shepherds and
+                       their sheep — with the terraced Judean hills, olive trees, the shepherds'
+                       fire and the flat-roofed village behind.
 
-The sky, the Star of Bethlehem and the falling snow are drawn live by countdown.js on top of
-and behind this picture; the script prints where the stable sits so the star can hang over it.
+What it tries to get right for first-century Judea: no snow; stone, mud and timber, not planed
+boards; a stone feeding trough for the manger; oil lamps, not glass lanterns; undyed and
+earth-dyed wool; fat-tailed Awassi sheep; shepherds (Luke 2) and no Magi, who came later
+(Matthew 2). The Star of Bethlehem and the night sky are drawn live by countdown.js; this script
+prints where the shelter sits in the picture so the star can hang over it.
 """
 import os
 import random
@@ -12,12 +18,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import *  # noqa: E402,F403
-import bmesh  # noqa: E402
-import figures  # noqa: E402  (Mary and Joseph)
-import hero  # noqa: E402  (for its fir-needle material; it only renders as __main__)
-from mathutils import Matrix, noise  # noqa: E402
+import figures  # noqa: E402  (Mary, Joseph and the shepherds)
+
+from mathutils import Euler, Matrix, noise  # noqa: E402
 
 OUT = out_dir()
+CAM = Vector((0.0, -15.6, 1.45))
+LOOK = Vector((-3.24, -0.34, 2.68))        # a little left of the shelter, which sits right of centre
+ROOF = 2.75                                 # height of the shelter's eaves at the front
 
 
 # ---------------------------------------------------------------------------
@@ -62,24 +70,17 @@ def sun(name, direction, strength, color, angle=2.0):
     return obj
 
 
-def snow_material(name="Snow"):
-    m = principled(name, (0.84, 0.89, 0.97), roughness=0.6, specular=0.35)
-    add_bump(m, scale=9.0, strength=0.05, detail=9.0)
-    return m
-
-
 def turn(obj, center, rotation):
     """Rotates an object about `center`. (common.cube() bakes its position into the mesh, so its
     origin is the world origin and a plain rotation_euler would swing it round that instead.)"""
-    from mathutils import Euler
     c = Matrix.Translation(Vector(center))
     obj.matrix_world = c @ Euler(rotation).to_matrix().to_4x4() @ c.inverted() @ obj.matrix_world
     return obj
 
 
-def mesh_object(name, verts, faces, smooth_shade=True):
+def mesh_object(name, verts, faces, smooth_shade=True, edges=()):
     me = bpy.data.meshes.new(name)
-    me.from_pydata(verts, [], faces)
+    me.from_pydata(verts, list(edges), faces)
     me.update()
     o = bpy.data.objects.new(name, me)
     bpy.context.collection.objects.link(o)
@@ -89,320 +90,23 @@ def mesh_object(name, verts, faces, smooth_shade=True):
     return o
 
 
-# ---------------------------------------------------------------------------
-# Landscape
-# ---------------------------------------------------------------------------
-
-CAM = Vector((0.0, -31.0, 2.9))
-STABLE = Vector((5.9, -13.0, 0.0))       # right of centre, so the clock can sit to its left
-STABLE_YAW = -14.0                      # turned to face the camera
-
-
-def ground_height(x, y):
-    """Snowfield: flat under the tree, soft drifts around it, rising into hills further back."""
-    drift = 0.42 * noise.noise(Vector((x * 0.07, y * 0.07, 0.3))) + 0.1 * noise.noise(Vector((x * 0.27, y * 0.27, 5.0)))
-    r = math.hypot(x - STABLE.x, y - STABLE.y)
-    h = drift * min(1.0, max(0.0, (r - 4.6) / 7.0))
-    back = max(0.0, y - 26.0)
-    hills = noise.noise(Vector((x * 0.011, y * 0.011, 2.0))) * 0.5 + 0.5
-    h += hills * back * 0.05 + 0.9 * noise.noise(Vector((x * 0.03, y * 0.03, 9.0))) * min(1.0, back / 40.0)
-    # A shallow rise each side frames the middle of the valley.
-    h += 0.00045 * abs(x) ** 2.1 * min(1.0, max(0.0, (y + 10.0) / 60.0))
-    return h
-
-
-def terrain():
-    nx, ny = 300, 260
+def lathe(name, profile, segments=40, subsurf=2):
+    """Spins a (radius, height) profile round the vertical axis."""
     verts, faces = [], []
-    for j in range(ny + 1):
-        y = CAM.y - 4.0 + 430.0 * (j / ny) ** 2.1
-        half = 46.0 + (y - CAM.y) * 0.95
-        for i in range(nx + 1):
-            x = -half + 2 * half * i / nx
-            verts.append((x, y, ground_height(x, y)))
-    for j in range(ny):
-        for i in range(nx):
-            a = j * (nx + 1) + i
-            faces.append((a, a + 1, a + nx + 2, a + nx + 1))
-    o = mesh_object("Terrain", verts, faces)
-    assign(o, snow_material())
-    return o
-
-
-def mountains():
-    """A far range, snow on the slopes and dark rock where it is steep."""
-    nx, ny = 640, 150
-    verts, faces = [], []
-    for j in range(ny + 1):
-        y = 430.0 + 520.0 * j / ny
-        for i in range(nx + 1):
-            x = -1150.0 + 2300.0 * i / nx
-            ridge = noise.ridged_multi_fractal(Vector((x * 0.0034, y * 0.0034, 3.7)), 0.9, 2.2, 8, 1.0, 2.0) * 0.62
-            env = math.sin(math.pi * j / ny) ** 0.7
-            side = 0.6 + 0.4 * min(1.0, abs(x - 150.0) / 420.0)     # lower behind the stable, so the star has open sky
-            verts.append((x, y, 30.0 + ridge * 105.0 * env * side))
-    for j in range(ny):
-        for i in range(nx):
-            a = j * (nx + 1) + i
-            faces.append((a, a + 1, a + nx + 2, a + nx + 1))
-    o = mesh_object("Mountains", verts, faces)
-    m = principled("MountainSnow", (0.8, 0.86, 0.96), roughness=0.7)
-    nt = m.node_tree
-    geo = nt.nodes.new("ShaderNodeNewGeometry")
-    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
-    ramp = nt.nodes.new("ShaderNodeValToRGB")
-    ramp.color_ramp.elements[0].position = 0.52
-    ramp.color_ramp.elements[0].color = (0.035, 0.045, 0.075, 1)
-    ramp.color_ramp.elements[1].position = 0.74
-    ramp.color_ramp.elements[1].color = (0.8, 0.86, 0.96, 1)
-    nt.links.new(geo.outputs["Normal"], sep.inputs["Vector"])
-    nt.links.new(sep.outputs["Z"], ramp.inputs["Fac"])
-    nt.links.new(ramp.outputs["Color"], bsdf(m).inputs["Base Color"])
-    assign(o, m)
-    return o
-
-
-def join(objs, name):
-    bpy.ops.object.select_all(action="DESELECT")
-    for o in objs:
-        o.select_set(True)
-    bpy.context.view_layer.objects.active = objs[0]
-    bpy.ops.object.convert(target="MESH")
-    bpy.ops.object.join()
-    o = bpy.context.object
-    o.name = name
-    return o
-
-
-def fir(rng, mats, H=9.0, R=2.5, tiers=12):
-    """A fir in deep winter: real needles on drooping boughs, each bough carrying a pad of snow."""
-    before = set(bpy.data.objects)
-    boughs, pads = [], []
-    for k in range(tiers):
-        f = k / tiers
-        h = 1.3 + (H - 2.0) * f + rng.uniform(-0.1, 0.1)
-        Rk = R * (1 - f) ** 0.92 + 0.18
-        n = max(5, int(15 * Rk / R) + 2)
-        off = rng.random() * 6.28
-        for j in range(n):
-            a = off + 2 * math.pi * j / n + rng.uniform(-0.22, 0.22)
-            L = Rk * rng.uniform(0.72, 1.08)
-            c, s_ = math.cos(a), math.sin(a)
-            droop = rng.uniform(0.26, 0.48) * L
-            dz = rng.uniform(-0.12, 0.12)
-            pts = [(0.03 * c, 0.03 * s_, h + 0.26 + dz), (0.4 * L * c, 0.4 * L * s_, h + 0.1 + dz),
-                   (0.78 * L * c, 0.78 * L * s_, h - droop * 0.7 + dz), (L * c, L * s_, h - droop + dz)]
-            side = Vector((-s_, c, 0))
-            width = 0.46 * L + 0.16
-            taper = lambda t: ((0.35 + 0.65 * math.sin(math.pi * min(1, t * 1.15)) ** 0.8)
-                               if t < 0.87 else max(0.08, (1 - t) * 4.5))
-            boughs.append(ribbon_strip("Bough", pts, width, lambda t, p, T, w=side: w, scale_fn=taper,
-                                       cup_fn=lambda t: 0.14, thickness=0.05, rows=12, cols=5))
-            # Snow lies along the top of the bough, thickest in the middle, thinning to nothing at the tip.
-            lifted = [(x, y, z + 0.075) for x, y, z in pts]
-            cover = rng.uniform(0.5, 0.82)
-            pads.append(ribbon_strip("Pad", lifted, width * cover, lambda t, p, T, w=side: w,
-                                     scale_fn=lambda t, tp=taper: tp(t) * max(0.0, 1 - t ** 3) + 0.02,
-                                     cup_fn=lambda t: 0.3, thickness=0.11, rows=10, cols=5))
-    for wdir in (Vector((1, 0, 0)), Vector((0, 1, 0))):
-        boughs.append(ribbon_strip("Leader", [(0, 0, H - 1.3), (0, 0, H - 0.5), (0, 0, H)], 0.34,
-                                   lambda t, p, T, w=wdir: w, scale_fn=lambda t: max(0.08, 1 - t ** 1.5),
-                                   thickness=0.04, rows=8, cols=3))
-    tree = join(boughs, "Fir")
-    assign(tree, mats["needles"])
-    tree.modifiers.new("Needles", "PARTICLE_SYSTEM")
-    ps = tree.particle_systems[0]
-    ps.seed = rng.randrange(1000)
-    pt = ps.settings
-    pt.type = "HAIR"
-    pt.count = int(5200 * R * H / 6)
-    pt.hair_length = 0.2
-    pt.emit_from = "FACE"
-    pt.use_advanced_hair = False
-    pt.child_type = "SIMPLE"
-    pt.rendered_child_count = 5
-    pt.child_length = 0.85
-    pt.child_length_threshold = 0.4
-    pt.child_radius = 0.07
-    pt.root_radius = 1.0
-    pt.tip_radius = 0.0
-    pt.radius_scale = 0.016
-    pt.material_slot = mats["needles"].name
-    snow = join(pads, "FirSnow")
-    sub = snow.modifiers.new("Subsurf", "SUBSURF")
-    sub.levels = sub.render_levels = 1
-    for poly in snow.data.polygons:
-        poly.use_smooth = True
-    assign(snow, mats["snow"])
-    trunk = cylinder("Trunk", 0.18, 2.4, (0, 0, 1.0), verts=12)
-    assign(trunk, mats["bark"])
-    return new_objects(before)
-
-
-def log_material():
-    m = principled("Logs", (0.085, 0.04, 0.018), roughness=0.82)
-    nt = m.node_tree
-    tc = nt.nodes.new("ShaderNodeTexCoord")
-    wave = nt.nodes.new("ShaderNodeTexWave")
-    wave.bands_direction = "Z"
-    wave.inputs["Scale"].default_value = 2.7
-    wave.inputs["Distortion"].default_value = 0.4
-    bump = nt.nodes.new("ShaderNodeBump")
-    bump.inputs["Strength"].default_value = 0.9
-    bump.inputs["Distance"].default_value = 0.12
-    nt.links.new(tc.outputs["Object"], wave.inputs["Vector"])
-    nt.links.new(wave.outputs["Fac"], bump.inputs["Height"])
-    nt.links.new(bump.outputs["Normal"], bsdf(m).inputs["Normal"])
-    return m
-
-
-def window(mats, x, y, z, w, h, facing):
-    """A lit, four-pane window on a wall whose outward normal is `facing` ('-y' or '+x' / '-x')."""
-    t = 0.06
-    if facing == "-y":
-        glass = cube("Glass", (w, t, h), (x, y - 0.02, z))
-        bars = [cube("Bar", (0.07, 0.1, h + 0.12), (x, y - 0.04, z)), cube("Bar", (w + 0.12, 0.1, 0.07), (x, y - 0.04, z))]
-        frame = [cube("Frame", (w + 0.24, 0.1, 0.12), (x, y - 0.03, z + sgn * (h / 2 + 0.06))) for sgn in (-1, 1)]
-        frame += [cube("Frame", (0.12, 0.1, h + 0.24), (x + sgn * (w / 2 + 0.06), y - 0.03, z)) for sgn in (-1, 1)]
-        sill = cube("SillSnow", (w + 0.4, 0.28, 0.12), (x, y - 0.14, z - h / 2 - 0.1), bevel=0.05)
-    else:
-        sgn_x = 1 if facing == "+x" else -1
-        glass = cube("Glass", (t, w, h), (x + sgn_x * 0.02, y, z))
-        bars = [cube("Bar", (0.1, 0.07, h + 0.12), (x + sgn_x * 0.04, y, z)), cube("Bar", (0.1, w + 0.12, 0.07), (x + sgn_x * 0.04, y, z))]
-        frame = [cube("Frame", (0.1, w + 0.24, 0.12), (x + sgn_x * 0.03, y, z + sgn * (h / 2 + 0.06))) for sgn in (-1, 1)]
-        frame += [cube("Frame", (0.1, 0.12, h + 0.24), (x + sgn_x * 0.03, y + sgn * (w / 2 + 0.06), z)) for sgn in (-1, 1)]
-        sill = cube("SillSnow", (0.28, w + 0.4, 0.12), (x + sgn_x * 0.14, y, z - h / 2 - 0.1), bevel=0.05)
-    assign(glass, mats["glow"])
-    for o in bars + frame:
-        assign(o, mats["trim"])
-    assign(sill, mats["snow"])
-
-
-def gable_roof(mats, W, D, wall_h, rise, overhang=0.7):
-    """Two pitched slabs with a thick, soft blanket of snow on top."""
-    half = W / 2 + overhang
-    slope = math.atan2(rise, W / 2)
-    length = half / math.cos(slope)
-    for sgn in (-1, 1):
-        cx = sgn * half / 2
-        cz = wall_h + rise - (half / 2) * math.tan(slope)
-        slab = cube("Roof", (length, D + 2 * overhang, 0.18), (cx, 0, cz))
-        turn(slab, (cx, 0, cz), (0, sgn * slope, 0))
-        assign(slab, mats["trim"])
-        bz = cz + 0.3 / math.cos(slope)
-        blanket = cube("RoofSnow", (length + 0.15, D + 2 * overhang + 0.2, 0.42), (cx - sgn * 0.02, 0, bz), bevel=0.16)
-        turn(blanket, (cx - sgn * 0.02, 0, bz), (0, sgn * slope, 0))
-        smooth(blanket, subsurf=2)
-        assign(blanket, mats["snow"])
-    # Gable ends (triangles) so the loft is closed.
-    for sgn in (-1, 1):
-        y = sgn * D / 2
-        tri = mesh_object("Gable", [(-W / 2, y, wall_h), (W / 2, y, wall_h), (0, y, wall_h + rise)], [(0, 1, 2)], smooth_shade=False)
-        sol = tri.modifiers.new("Thick", "SOLIDIFY")
-        sol.thickness = 0.3
-        sol.offset = 0
-        assign(tri, mats["logs"])
-
-
-def cabin(mats, rng, W=7.0, D=5.5, wall_h=2.9, rise=2.3):
-    before = set(bpy.data.objects)
-    walls = cube("Walls", (W, D, wall_h), (0, 0, wall_h / 2), bevel=0.04)
-    assign(walls, mats["logs"])
-    gable_roof(mats, W, D, wall_h, rise)
-    # Front (towards the camera, -y): door and two windows; one window on each side wall.
-    door = cube("Door", (1.05, 0.1, 2.05), (0.2, -D / 2 - 0.03, 1.03), bevel=0.02)
-    assign(door, mats["trim"])
-    for x in (-W * 0.3, W * 0.33):
-        window(mats, x, -D / 2, 1.65, 1.15, 1.2, "-y")
-    window(mats, W / 2, 0.3, 1.65, 1.2, 1.2, "+x")
-    window(mats, -W / 2, 0.3, 1.65, 1.2, 1.2, "-x")
-    window(mats, 0, -D / 2 - 0.16, wall_h + rise * 0.42, 0.7, 0.7, "-y")       # loft
-    # Chimney with a snow cap.
-    cx = W * 0.26
-    stack = cube("Chimney", (0.85, 0.85, 2.6), (cx, 0.6, wall_h + rise - 0.2), bevel=0.03)
-    assign(stack, mats["stone"])
-    cap = cube("ChimneySnow", (1.0, 1.0, 0.22), (cx, 0.6, wall_h + rise + 1.18), bevel=0.09)
-    smooth(cap, subsurf=1)
-    assign(cap, mats["snow"])
-    # Warm light spilling from the windows and the door lantern.
-    for x in (-W * 0.3, W * 0.33):
-        point_light("WindowGlow", (x, -D / 2 - 0.9, 1.5), 260, (1.0, 0.62, 0.28), radius=0.5)
-    point_light("Lantern", (0.95, -D / 2 - 0.35, 2.35), 90, (1.0, 0.7, 0.35), radius=0.08)
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.11, location=(0.95, -D / 2 - 0.3, 2.35), segments=12, ring_count=8)
-    assign(bpy.context.object, mats["lantern"])
-    bpy.context.object.visible_shadow = False
-    return new_objects(before)
-
-
-def chapel(mats):
-    """A small white chapel: nave, bell tower with a lit belfry, slim snow-covered spire and cross."""
-    before = set(bpy.data.objects)
-    W, D, wall_h, rise = 6.4, 10.5, 4.0, 2.9
-    tw, th, ty = 2.8, 8.6, -D / 2 - 0.6
-    assign(cube("Walls", (W, D, wall_h), (0, 0, wall_h / 2), bevel=0.04), mats["plaster"])
-    assign(cube("Plinth", (W + 0.3, D + 0.3, 0.6), (0, 0, 0.3), bevel=0.03), mats["stone"])
-    gable_roof({**mats, "logs": mats["plaster"]}, W, D, wall_h, rise, overhang=0.35)
-    assign(cube("Tower", (tw, tw, th), (0, ty, th / 2), bevel=0.04), mats["plaster"])
-    assign(cube("TowerPlinth", (tw + 0.3, tw + 0.3, 0.6), (0, ty, 0.3), bevel=0.03), mats["stone"])
-    assign(cube("Cornice", (tw + 0.4, tw + 0.4, 0.22), (0, ty, th + 0.05), bevel=0.04), mats["trim"])
-    # Spire: eight-sided, slim, snow lying on it, with a small gold cross.
-    bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=tw * 0.62, radius2=0.04, depth=6.6, location=(0, ty, th + 0.16 + 3.3),
-                                    rotation=(0, 0, deg(22.5)))
-    assign(bpy.context.object, mats["snow"])
-    cross = gold("Cross", roughness=0.3)
-    assign(cube("CrossPost", (0.09, 0.09, 1.0), (0, ty, th + 6.76 + 0.45), bevel=0.01), cross)
-    assign(cube("CrossBar", (0.52, 0.09, 0.09), (0, ty, th + 6.76 + 0.62), bevel=0.01), cross)
-    # Door with a lantern above it, a round window, and the belfry glowing on every side.
-    assign(cube("Door", (1.25, 0.12, 2.4), (0, ty - tw / 2 - 0.03, 1.8), bevel=0.03), mats["trim"])
-    for i in range(3):
-        assign(cube("Step", (2.2 - i * 0.3, 0.5, 0.2), (0, ty - tw / 2 - 0.25 - (2 - i) * 0.42, 0.1 + i * 0.2), bevel=0.02), mats["stone"])
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.45, depth=0.08, vertices=32, location=(0, ty - tw / 2 - 0.02, 4.6), rotation=(deg(90), 0, 0))
-    assign(bpy.context.object, mats["glow"])
-    window(mats, 0, ty - tw / 2, 7.15, 0.75, 1.3, "-y")
-    window(mats, tw / 2, ty, 7.15, 0.75, 1.3, "+x")
-    window(mats, -tw / 2, ty, 7.15, 0.75, 1.3, "-x")
-    for y in (-3.0, 0.0, 3.0):
-        window(mats, W / 2, y, 2.5, 0.8, 2.0, "+x")
-        window(mats, -W / 2, y, 2.5, 0.8, 2.0, "-x")
-    for x in (-2.25, 2.25):
-        window(mats, x, -D / 2, 2.5, 0.8, 2.0, "-y")
-    point_light("DoorLantern", (0, ty - tw / 2 - 0.5, 3.4), 220, (1.0, 0.68, 0.32), radius=0.1)
-    sphere("DoorLamp", 0.1, (0, ty - tw / 2 - 0.25, 3.4), segments=12).visible_shadow = False
-    assign(bpy.data.objects["DoorLamp"], mats["lantern"])
-    for sgn in (-1, 1):
-        point_light("NaveGlow", (sgn * (W / 2 + 1.0), 0, 2.2), 240, (1.0, 0.64, 0.3), radius=0.6)
-    return new_objects(before)
-
-
-def lathe(name, profile, segments=40, start=0.0, sweep=2 * math.pi, thickness=0.0, subsurf=2):
-    """Spins a (radius, height) profile round the vertical axis. A partial sweep leaves the
-    shape open (a veil or cloak that shows what is inside)."""
-    closed = abs(sweep - 2 * math.pi) < 1e-6
-    cols = segments if closed else segments + 1
-    verts, faces = [], []
-    for c in range(cols):
-        a = start + sweep * c / segments
+    for c in range(segments):
+        a = 2 * math.pi * c / segments
         for r, z in profile:
             verts.append((r * math.cos(a), r * math.sin(a), z))
     n = len(profile)
     for c in range(segments):
-        c2 = (c + 1) % cols
+        c2 = (c + 1) % segments
         for k in range(n - 1):
             faces.append((c * n + k, c2 * n + k, c2 * n + k + 1, c * n + k + 1))
     o = mesh_object(name, verts, faces)
-    if thickness:
-        sol = o.modifiers.new("Thick", "SOLIDIFY")
-        sol.thickness = thickness
     if subsurf:
         sub = o.modifiers.new("Subsurf", "SUBSURF")
         sub.levels = sub.render_levels = subsurf
     return o
-
-
-def cloth(name, color, rough=0.62):
-    m = principled(name, color, roughness=rough, sheen=0.25)
-    add_bump(m, scale=70.0, strength=0.12, detail=3.0)
-    return m
 
 
 def sphere(name, radius, loc, scale=(1, 1, 1), segments=32):
@@ -413,239 +117,657 @@ def sphere(name, radius, loc, scale=(1, 1, 1), segments=32):
     return o
 
 
-def tube(name, points, radius, mat):
-    o = curve_tube(name, points, radius, resolution=12)
+def tube(name, points, radius, mat, resolution=12):
+    o = curve_tube(name, points, radius, resolution=resolution)
     o.data.materials.append(mat)
     return o
 
 
-def stand(objs, loc, yaw, lean=0.0):
-    """Parents a group's parts to one point so it can be placed, turned and inclined."""
+def group(objs, loc=(0, 0, 0), yaw=0.0, scale=1.0):
+    """Parents parts to one point so the whole thing can be placed and turned."""
     root = bpy.data.objects.new("Group", None)
     bpy.context.collection.objects.link(root)
     for o in objs:
         if o.parent is None:
             o.parent = root
     root.location = loc
-    root.rotation_euler = (deg(lean), 0, deg(yaw))
+    root.rotation_euler = (0, 0, deg(yaw))
+    root.scale = (scale, scale, scale)
     return root
 
 
-SKIN = (0.5, 0.29, 0.2)
-
-
-def manger(mats, rng):
-    """A rough wooden crib filled with straw, and the child wrapped in swaddling cloths."""
-    before = set(bpy.data.objects)
-    for sgn in (-1, 1):
-        for tilt in (-1, 1):
-            leg = cube("Leg", (0.07, 0.07, 0.95), (sgn * 0.4, tilt * 0.02, 0.4), bevel=0.01)
-            turn(leg, (sgn * 0.4, tilt * 0.02, 0.4), (deg(tilt * 32), 0, 0))
-            assign(leg, mats["timber"])
-    for tilt in (-1, 1):
-        board = cube("Side", (1.12, 0.035, 0.34), (0, tilt * 0.2, 0.66), bevel=0.008)
-        turn(board, (0, tilt * 0.2, 0.66), (deg(-tilt * 24), 0, 0))
-        assign(board, mats["timber"])
-    for sgn in (-1, 1):
-        assign(cube("End", (0.035, 0.42, 0.3), (sgn * 0.55, 0, 0.67), bevel=0.008), mats["timber"])
-    bed = sphere("StrawBed", 0.5, (0, 0, 0.68), scale=(1.05, 0.42, 0.24))
-    assign(bed, mats["straw"])
-    straw(bed, 3200, 0.1, seed=3)
-    bundle = sphere("Swaddling", 0.5, (0.03, 0, 0.9), scale=(0.62, 0.3, 0.26))
-    bundle.rotation_euler = (0, deg(-9), 0)
-    assign(bundle, mats["swaddle"])
-    head = sphere("ChildHead", 0.082, (-0.3, 0, 0.97), scale=(1.0, 0.95, 0.95))
-    assign(head, mats["skin"])
-    wrap = lathe("HeadCloth", [(0.0, 0.1), (0.06, 0.085), (0.092, 0.03), (0.096, -0.04)], thickness=0.012,
-                 start=deg(40), sweep=deg(280), subsurf=1)
-    wrap.location = (-0.3, 0, 0.97)
-    wrap.rotation_euler = (0, deg(-70), 0)
-    assign(wrap, mats["swaddle"])
-    return new_objects(before)
-
-
-def straw(obj, count, length, seed=1):
-    obj.modifiers.new("Straw", "PARTICLE_SYSTEM")
-    ps = obj.particle_systems[0]
+def strands(obj, mat, count, length, seed=1, children=4, thickness=0.012, curl=0.0, group_name=None, random_dir=0.8):
+    """Straw, thatch, dry grass, wool, leaves: fine strands growing from an object's faces."""
+    if mat.name not in [s.name for s in obj.material_slots]:
+        obj.data.materials.append(mat)
+    obj.modifiers.new("Strands", "PARTICLE_SYSTEM")
+    ps = obj.particle_systems[-1]
     ps.seed = seed
+    if group_name:
+        ps.vertex_group_density = group_name
     pt = ps.settings
     pt.type = "HAIR"
     pt.count = count
     pt.hair_length = length
     pt.emit_from = "FACE"
     pt.use_advanced_hair = True
-    pt.normal_factor = 0.02
-    pt.factor_random = 0.09
+    # A strand's length follows the speed it "leaves" the surface with, so keep that speed
+    # constant and let `random_dir` (0 = straight out, 1 = any direction) only steer it.
+    pt.normal_factor = 0.1 * (1 - random_dir)
+    pt.factor_random = 0.1 * random_dir
     pt.child_type = "SIMPLE"
-    pt.rendered_child_count = 3
+    pt.rendered_child_count = children
     pt.child_radius = 0.06
+    if curl:
+        pt.kink = "CURL"
+        pt.kink_amplitude = curl
+        pt.kink_frequency = 3.0
     pt.root_radius = 1.0
-    pt.tip_radius = 0.6
-    pt.radius_scale = 0.012
-    pt.material_slot = obj.material_slots[0].name
-    if obj.material_slots[0].name == "StrawFloor":
-        obj.data.materials.append(bpy.data.materials["Straw"])
-        pt.material_slot = "Straw"
+    pt.tip_radius = 0.5
+    pt.radius_scale = thickness
+    pt.material_slot = mat.name
 
 
-def stable(mats, rng, people):
-    """An open-fronted timber stable under a blanket of snow, lit by a single lantern."""
+# ---------------------------------------------------------------------------
+# Materials
+# ---------------------------------------------------------------------------
+
+def varied(name, dark, light, roughness=0.9, bump=0.6, bump_scale=14.0, tex_scale=3.0):
+    """A natural surface: two tones mixed by noise, a little different on every object, and rough."""
+    m = principled(name, light, roughness=roughness, specular=0.25)
+    nt = m.node_tree
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    tex = nt.nodes.new("ShaderNodeTexNoise")
+    tex.inputs["Scale"].default_value = tex_scale
+    tex.inputs["Detail"].default_value = 8.0
+    info = nt.nodes.new("ShaderNodeObjectInfo")
+    add = nt.nodes.new("ShaderNodeMath")
+    add.operation = "MULTIPLY_ADD"
+    add.inputs[1].default_value = 0.45
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].position = 0.35
+    ramp.color_ramp.elements[0].color = (*dark, 1)
+    ramp.color_ramp.elements[1].position = 0.95
+    ramp.color_ramp.elements[1].color = (*light, 1)
+    nt.links.new(tc.outputs["Object"], tex.inputs["Vector"])
+    nt.links.new(info.outputs["Random"], add.inputs[0])
+    nt.links.new(tex.outputs["Fac"], add.inputs[2])
+    nt.links.new(add.outputs[0], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], bsdf(m).inputs["Base Color"])
+    add_bump(m, scale=bump_scale, strength=bump, detail=10.0)
+    return m
+
+
+def materials():
+    return {
+        "limestone": varied("Limestone", (0.1, 0.085, 0.065), (0.36, 0.31, 0.24), bump=1.0, bump_scale=22.0, tex_scale=5.0),
+        "plaster": varied("MudPlaster", (0.3, 0.25, 0.18), (0.52, 0.45, 0.34), bump=0.35, bump_scale=6.0, tex_scale=1.4),
+        "rock": varied("Rock", (0.08, 0.07, 0.055), (0.34, 0.3, 0.23), bump=1.0, bump_scale=9.0, tex_scale=2.6),
+        "timber": varied("Timber", (0.07, 0.04, 0.02), (0.2, 0.12, 0.06), bump=0.7, bump_scale=30.0, tex_scale=9.0),
+        "bark": varied("OliveBark", (0.08, 0.065, 0.05), (0.26, 0.22, 0.17), bump=1.0, bump_scale=18.0, tex_scale=6.0),
+        "thatch": varied("Thatch", (0.12, 0.085, 0.04), (0.34, 0.26, 0.12), bump=0.9, bump_scale=40.0, tex_scale=10.0),
+        "earth": varied("Earth", (0.14, 0.105, 0.07), (0.3, 0.24, 0.16), bump=0.5, bump_scale=30.0, tex_scale=10.0),
+        "clay": varied("Terracotta", (0.3, 0.13, 0.06), (0.5, 0.24, 0.12), roughness=0.8, bump=0.2),
+        "straw": principled("Straw", (0.52, 0.38, 0.14), roughness=0.7),
+        "dry_grass": principled("DryGrass", (0.36, 0.3, 0.14), roughness=0.8),
+        "olive_leaf": principled("OliveLeaf", (0.11, 0.15, 0.1), roughness=0.5, sheen=0.4),
+        "cypress": principled("Cypress", (0.015, 0.04, 0.022), roughness=0.7),
+        "wool": varied("SheepWool", (0.3, 0.27, 0.21), (0.56, 0.51, 0.42), roughness=0.95, bump=1.0, bump_scale=130.0, tex_scale=30.0),
+        "sheep_face": principled("SheepFace", (0.12, 0.07, 0.04), roughness=0.8),
+        "dark": principled("Doorway", (0.01, 0.008, 0.006), roughness=1.0),
+        "window": principled("LampWindow", (1.0, 0.7, 0.35), emission=(1.0, 0.55, 0.2), emission_strength=9.0),
+        "flame": principled("Flame", (1.0, 0.75, 0.4), emission=(1.0, 0.52, 0.16), emission_strength=70.0),
+        "fire": principled("Fire", (1.0, 0.6, 0.2), emission=(1.0, 0.4, 0.08), emission_strength=45.0),
+        "child_skin": figures.skin_material("ChildSkin", (0.5, 0.3, 0.22)),
+        "child_hair": principled("ChildHair", (0.02, 0.012, 0.008), roughness=0.5),
+        "swaddle": figures.cloth_material("Swaddling", (0.5, 0.45, 0.36)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Land
+# ---------------------------------------------------------------------------
+
+def smoothstep(t):
+    t = max(0.0, min(1.0, t))
+    return t * t * (3 - 2 * t)
+
+
+TOWN = Vector((-46.0, 118.0))             # the village on its ridge
+FIRE = Vector((-13.0, 30.0))              # where the other shepherds keep watch
+
+
+def ground_height(x, y):
+    r = math.hypot(x, y - 0.6)
+    rough = 0.22 * noise.noise(Vector((x * 0.09, y * 0.09, 0.3))) + 0.06 * noise.noise(Vector((x * 0.4, y * 0.4, 5.0)))
+    h = rough * smoothstep((r - 4.6) / 6.0)
+    # The rocky bank the shelter is built against: behind it and running off to the right.
+    h += 3.4 * smoothstep((y - 2.5) / 2.4) * smoothstep((x + 4.4) / 1.8) * (1 - 0.5 * smoothstep((y - 30) / 40))
+    # Away from the shelter the ground falls into a shallow valley, then climbs in broad terraces.
+    d = math.hypot(x, y)
+    h -= 3.2 * smoothstep((d - 12) / 30) * smoothstep((-x + 4) / 12)
+    hills = noise.noise(Vector((x * 0.006, y * 0.006, 2.0))) * 0.5 + 0.5
+    climb = hills * max(0.0, y - 55.0) * 0.085 + 1.6 * noise.noise(Vector((x * 0.02, y * 0.02, 9.0))) * smoothstep((d - 30) / 40)
+    climb += 12.5 * math.exp(-((x - TOWN.x) ** 2 + (y - TOWN.y) ** 2) / (2 * 44.0 ** 2))
+    terraced = round(climb / 1.4) * 1.4
+    h += climb + 0.55 * (terraced - climb) * smoothstep((d - 28) / 20)
+    # The watch fire has a level patch.
+    near_fire = 1 - smoothstep((math.hypot(x - FIRE.x, y - FIRE.y) - 2.5) / 6.0)
+    return h * (1 - near_fire) + FIRE_LEVEL * near_fire
+
+
+FIRE_LEVEL = -2.6
+
+
+def terrain(mats):
+    nx, ny = 360, 320
+    verts, faces = [], []
+    for j in range(ny + 1):
+        y = CAM.y - 3.0 + 640.0 * (j / ny) ** 2.3
+        half = 34.0 + (y - CAM.y) * 0.95
+        for i in range(nx + 1):
+            x = -half * 1.25 + 2.25 * half * i / nx
+            verts.append((x, y, ground_height(x, y)))
+    for j in range(ny):
+        for i in range(nx):
+            a = j * (nx + 1) + i
+            faces.append((a, a + 1, a + nx + 2, a + nx + 1))
+    o = mesh_object("Terrain", verts, faces)
+    # Dry earth where it is level, bare limestone where it is steep.
+    m = varied("Ground", (0.07, 0.055, 0.035), (0.2, 0.16, 0.105), bump=0.9, bump_scale=3.0, tex_scale=0.9)
+    nt = m.node_tree
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    steep = nt.nodes.new("ShaderNodeValToRGB")
+    steep.color_ramp.elements[0].position = 0.78
+    steep.color_ramp.elements[0].color = (1, 1, 1, 1)
+    steep.color_ramp.elements[1].position = 0.93
+    steep.color_ramp.elements[1].color = (0, 0, 0, 1)
+    mix = nt.nodes.new("ShaderNodeMixRGB")
+    mix.inputs["Color2"].default_value = (0.26, 0.23, 0.18, 1)
+    base = bsdf(m).inputs["Base Color"].links[0].from_socket
+    nt.links.new(geo.outputs["Normal"], sep.inputs["Vector"])
+    nt.links.new(sep.outputs["Z"], steep.inputs["Fac"])
+    nt.links.new(steep.outputs["Color"], mix.inputs["Fac"])
+    nt.links.new(base, mix.inputs["Color1"])
+    nt.links.new(mix.outputs["Color"], bsdf(m).inputs["Base Color"])
+    assign(o, m)
+    return o
+
+
+def rock_face(mats):
+    """The weathered limestone bank behind the shelter, in finer detail than the terrain."""
+    nx, nz = 150, 44
+    verts, faces = [], []
+    for k in range(nz + 1):
+        f = k / nz
+        for i in range(nx + 1):
+            x = -4.6 + 14.0 * i / nx
+            z = -0.2 + 4.3 * f
+            lean = 2.55 + 1.5 * f ** 1.6                                    # leaning back as it rises
+            bulge = 0.4 * noise.noise(Vector((x * 0.45, z * 0.7, 1.3))) + 0.2 * noise.noise(Vector((x * 1.7, z * 2.2, 4.0)))
+            # Limestone lies in beds: horizontal ledges, broken by cracks.
+            ledge = 0.16 * math.sin(z * 6.0 + 1.1 * noise.noise(Vector((x * 0.3, 0, 7.0)))) ** 3
+            crack = -0.14 * max(0.0, noise.noise(Vector((x * 2.6, z * 0.5, 11.0))) - 0.45)
+            fade = smoothstep((x + 4.6) / 1.5)
+            verts.append((x, lean - (bulge + ledge + crack) * fade + (1 - fade) * 1.6, z * (0.2 + 0.8 * fade)))
+    for k in range(nz):
+        for i in range(nx):
+            a = k * (nx + 1) + i
+            faces.append((a, a + 1, a + nx + 2, a + nx + 1))
+    o = mesh_object("RockFace", verts, faces)
+    assign(o, mats["rock"])
+    return o
+
+
+def boulder(rng, mat, size):
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=size)
+    o = bpy.context.object
+    o.name = "Stone"
+    offset = Vector((rng.random() * 9, rng.random() * 9, 0))
+    for v in o.data.vertices:
+        v.co *= 1 + 0.32 * noise.noise(v.co * (1.6 / size) + offset)
+        v.co.z *= 0.62
+    smooth(o)
+    assign(o, mat)
+    return o
+
+
+# ---------------------------------------------------------------------------
+# Trees
+# ---------------------------------------------------------------------------
+
+def olive(rng, mats, size=1.0):
+    """An old olive: a short, twisted trunk dividing into a few heavy limbs under a rounded,
+    grey-green crown."""
     before = set(bpy.data.objects)
-    W, D, H, rise = 4.8, 3.3, 2.45, 1.45
-    # Posts and beams.
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            post = cube("Post", (0.2, 0.2, H), (sx * (W / 2 - 0.1), sy * (D / 2 - 0.1), H / 2), bevel=0.02)
-            turn(post, (sx * (W / 2 - 0.1), sy * (D / 2 - 0.1), 0), (deg(rng.uniform(-1.5, 1.5)), deg(rng.uniform(-1.5, 1.5)), 0))
-            assign(post, mats["timber"])
-    for sy in (-1, 1):
-        assign(cube("Beam", (W + 0.3, 0.2, 0.2), (0, sy * (D / 2 - 0.1), H - 0.02), bevel=0.02), mats["timber"])
-    # Back wall, and half-height side walls, of uneven vertical planks.
-    x = -W / 2 + 0.14
-    while x < W / 2 - 0.1:
-        w = rng.uniform(0.22, 0.34)
-        plank = cube("Plank", (w - 0.02, 0.05, H - rng.uniform(0.0, 0.08)), (x + w / 2, D / 2 - 0.06, H / 2), bevel=0.006)
-        assign(plank, mats["planks"])
-        x += w
-    # A solid backing, so no night shows through the gaps between the planks.
-    assign(cube("Backing", (W - 0.2, 0.04, H - 0.05), (0, D / 2 - 0.01, H / 2)), mats["timber"])
-    for sx in (-1, 1):
-        y = -D / 2 + 0.6
-        while y < D / 2 - 0.1:
-            w = rng.uniform(0.22, 0.34)
-            hgt = 1.25 + rng.uniform(-0.06, 0.06)
-            plank = cube("Plank", (0.05, w - 0.02, hgt), (sx * (W / 2 - 0.06), y + w / 2, hgt / 2), bevel=0.006)
-            assign(plank, mats["planks"])
-            y += w
-    gable_roof({**mats, "logs": mats["planks"], "trim": mats["timber"]}, W, D, H + 0.08, rise, overhang=0.55)
-    # Straw underfoot.
-    floor = cube("StrawFloor", (W - 0.35, D - 0.1, 0.06), (0, 0.0, 0.02), bevel=0.025)
-    assign(floor, mats["earth"])
-    straw(floor, 16000, 0.17, seed=5)
-    # The lantern, and the soft light that seems to come from the manger itself.
-    tube("LanternHook", [(0, -0.35, H - 0.1), (0, -0.35, H - 0.42)], 0.008, mats["timber"])
-    lamp = sphere("Lantern", 0.085, (0, -0.35, H - 0.5), segments=16)
-    assign(lamp, mats["lantern"])
-    lamp.visible_shadow = False
-    point_light("LanternLight", (0, -0.35, H - 0.5), 620, (1.0, 0.66, 0.3), radius=0.1)
-    point_light("MangerLight", (0.0, -0.75, 1.12), 95, (1.0, 0.85, 0.62), radius=0.1)
-    # Light reaching out over the snow in front.
-    area_light("Spill", (0, -D / 2 - 0.3, 1.9), (0, -D / 2 - 3.5, 0.0), 260, 2.2, (1.0, 0.68, 0.34))
+    verts, edges, radii, tips = [(0.0, 0.0, -0.1)], [], [0.26 * size], []
 
-    parts = new_objects(before)
-    parts.append(stand(manger(mats, rng), (0.0, -0.55, 0.05), 0))
-    # Mary kneels at the manger's side, Joseph stands watch at the other; both turned to the child.
-    for figure, loc, yaw in zip(people, [(-1.08, -0.62, 0.09), (1.14, -0.3, 0.09)], [68, -56]):
-        figure.location = loc
-        figure.rotation_euler = (0, 0, deg(yaw))
-        parts.append(figure)
-    return stand(parts, tuple(STABLE), STABLE_YAW)
+    def grow(parent, pos, heading, length, radius, depth):
+        for s in range(3):
+            heading = (heading + Vector((rng.uniform(-0.28, 0.28), rng.uniform(-0.28, 0.28), rng.uniform(-0.05, 0.12)))).normalized()
+            pos = pos + heading * length / 3
+            verts.append(tuple(pos))
+            radii.append(radius * (1 - 0.14 * (s + 1)))
+            edges.append((parent, len(verts) - 1))
+            parent = len(verts) - 1
+        if depth == 0:
+            tips.append(pos)
+            return
+        for _ in range(rng.choice([2, 2, 3])):
+            a = rng.uniform(0, 6.28)
+            side = Vector((math.cos(a), math.sin(a), rng.uniform(0.15, 0.6)))
+            grow(parent, pos, (heading * 0.55 + side * 0.75).normalized(), length * 0.74, radius * 0.6, depth - 1)
+
+    grow(0, Vector((0, 0, -0.1)), Vector((rng.uniform(-0.15, 0.15), rng.uniform(-0.15, 0.15), 1)), 1.5 * size, 0.24 * size, 3)
+    wood = mesh_object("OliveWood", verts, [], edges=edges)
+    wood.modifiers.new("Skin", "SKIN")
+    for i, r in enumerate(radii):
+        wood.data.skin_vertices[0].data[i].radius = (r, r * rng.uniform(0.8, 1.0))
+    wood.data.skin_vertices[0].data[0].use_root = True
+    sub = wood.modifiers.new("Subsurf", "SUBSURF")
+    sub.levels = sub.render_levels = 1
+    assign(wood, mats["bark"])
+    for i, tip in enumerate(tips):
+        r = rng.uniform(0.55, 0.9) * size
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=r, location=tip + Vector((0, 0, r * 0.25)))
+        crown = bpy.context.object
+        crown.name = "OliveCrown"
+        crown.scale = (1.0, 1.0, 0.72)
+        assign(crown, mats["olive_leaf"])
+        strands(crown, mats["olive_leaf"], 1400, 0.075 * size, seed=i + 1, children=6, thickness=0.012, random_dir=0.5)
+        for k in range(2):                                             # an uneven crown, not a ball
+            r2 = r * rng.uniform(0.55, 0.8)
+            bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=r2, location=tip + Vector((rng.uniform(-r, r), rng.uniform(-r, r), rng.uniform(-0.1, 0.5) * r)))
+            extra = bpy.context.object
+            extra.name = "OliveCrown"
+            extra.scale = (1.0, 1.0, 0.7)
+            assign(extra, mats["olive_leaf"])
+            strands(extra, mats["olive_leaf"], 800, 0.075 * size, seed=i * 3 + k, children=6, thickness=0.012, random_dir=0.5)
+    return new_objects(before)
+
+
+def cypress(mats, height=8.0):
+    before = set(bpy.data.objects)
+    profile = [(0.0, 0.0), (0.42, 0.25), (0.74, 1.4), (0.7, height * 0.5), (0.42, height * 0.82), (0.0, height + 0.3)]
+    o = lathe("Cypress", profile, segments=20, subsurf=1)
+    assign(o, mats["cypress"])
+    strands(o, mats["cypress"], 9000, 0.3, children=4, thickness=0.018, random_dir=0.2)
+    return new_objects(before)
+
+
+# ---------------------------------------------------------------------------
+# Buildings
+# ---------------------------------------------------------------------------
+
+def stone_wall(mats, rng, start, end, height, thickness=0.42, ragged=True):
+    """A dry-stone wall: courses of field stone roughly squared with a hammer — no two alike,
+    none quite level, the top course broken."""
+    a, b = Vector(start), Vector(end)
+    along = (b - a)
+    along.z = 0.0
+    length = along.length
+    along.normalize()
+    across = Vector((-along.y, along.x, 0))
+    yaw = math.atan2(along.y, along.x)
+    heights = []
+    while sum(heights) < height:
+        heights.append(rng.uniform(0.13, 0.3))
+    z = 0.0
+    for course, ch in enumerate(heights):
+        last = course == len(heights) - 1
+        s = -rng.uniform(0.0, 0.3) if course % 2 else 0.0
+        while s < length:
+            bl = rng.uniform(0.16, 0.72)
+            if last and ragged and rng.random() < 0.4:
+                s += bl
+                continue
+            high = ch * rng.uniform(0.86, 1.0)
+            centre = a + along * min(length, s + bl / 2) + across * rng.uniform(-0.035, 0.035) + Vector((0, 0, z + high / 2))
+            block = cube("Block", (bl - 0.02, thickness * rng.uniform(0.8, 1.08), high - 0.012), tuple(centre), bevel=0.05)
+            turn(block, tuple(centre), (deg(rng.uniform(-4, 4)), deg(rng.uniform(-4, 4)), yaw + deg(rng.uniform(-5, 5))))
+            assign(block, mats["limestone"])
+            s += bl
+        z += ch
+
+
+def shelter(mats, rng):
+    """A lean-to for animals: two dry-stone side walls against the rock, forked posts and beams,
+    and a roof of poles, brushwood and reed."""
+    before = set(bpy.data.objects)
+    W, front, back = 5.3, -0.85, 2.7
+    stone_wall(mats, rng, (-W / 2, front + 0.7, 0), (-W / 2, back, 0), 2.2)
+    stone_wall(mats, rng, (W / 2, front + 0.3, 0), (W / 2, back, 0), 2.35)
+    stone_wall(mats, rng, (W / 2 - 0.2, front + 0.3, 0), (W / 2 + 1.9, front + 0.55, 0), 0.9)                   # a low fold wall
+    # The back is built up in stone against the rock, which shows above it.
+    stone_wall(mats, rng, (-W / 2 + 0.2, back - 0.12, 0), (W / 2 - 0.2, back - 0.12, 0), 2.5, thickness=0.36)
+    assign(cube("Packing", (W - 0.3, 0.3, 2.4), (0, back + 0.16, 1.2)), mats["earth"])     # earth and rubble behind it
+    # Forked posts at the front, a beam across them, another on the rock behind.
+    for sx in (-1, 1):
+        x = sx * (W / 2 - 0.15)
+        tube("Post", [(x, front, -0.1), (x + 0.04 * sx, front + 0.03, 1.1), (x - 0.02 * sx, front, 2.0), (x, front, ROOF - 0.12)], 0.085, mats["timber"])
+        for fork in (-1, 1):
+            tube("Fork", [(x, front, ROOF - 0.3), (x + fork * 0.13, front, ROOF + 0.12)], 0.05, mats["timber"])
+    tube("Beam", [(-W / 2 - 0.5, front, ROOF), (-0.8, front + 0.03, ROOF - 0.04), (1.0, front - 0.02, ROOF + 0.02), (W / 2 + 0.5, front, ROOF)], 0.085, mats["timber"])
+    tube("BackBeam", [(-W / 2 - 0.3, back + 0.1, ROOF + 0.55), (W / 2 + 0.3, back + 0.1, ROOF + 0.55)], 0.08, mats["timber"])
+    n = 9
+    for i in range(n):
+        x = -W / 2 - 0.2 + (W + 0.4) * i / (n - 1) + rng.uniform(-0.08, 0.08)
+        tube("Rafter", [(x, front - 0.55 - rng.uniform(0, 0.25), ROOF + 0.02), (x + rng.uniform(-0.05, 0.05), (front + back) / 2, ROOF + 0.36),
+                        (x, back + 0.35, ROOF + 0.66)], 0.045, mats["timber"])
+    # Brushwood and reed laid over the rafters.
+    cy, cz = (front + back) / 2 - 0.1, ROOF + 0.45
+    slope = math.atan2(0.62, back - front)
+    roof = cube("Thatch", (W + 0.7, back - front + 1.0, 0.16), (0, cy, cz), bevel=0.06)
+    smooth(roof, subsurf=1)
+    turn(roof, (0, cy, cz), (slope, 0, 0))
+    assign(roof, mats["thatch"])
+    strands(roof, mats["thatch"], 34000, 0.3, seed=4, children=3, thickness=0.014, random_dir=0.5)
+    for i in range(80):
+        x = rng.uniform(-W / 2 - 0.5, W / 2 + 0.5)
+        y0 = front - 0.5 - rng.uniform(0.0, 0.45)
+        tube("Brush", [(x, y0, ROOF + 0.08 + rng.uniform(-0.05, 0.03)), (x + rng.uniform(-0.2, 0.2), y0 + rng.uniform(0.9, 1.8), ROOF + 0.42)],
+             rng.uniform(0.008, 0.02), mats["timber"], resolution=3)
+    # Trodden earth and straw underfoot, a heap of hay in the corner.
+    floor = sphere("Floor", 1.0, (0, 0.75, -0.02), scale=(W / 2 + 0.3, 2.1, 0.05), segments=48)
+    assign(floor, mats["earth"])
+    strands(floor, mats["straw"], 22000, 0.16, seed=5, children=3)
+    hay = sphere("Hay", 0.7, (-1.95, 2.0, 0.2), scale=(1.0, 0.8, 0.55))
+    assign(hay, mats["straw"])
+    strands(hay, mats["straw"], 6000, 0.22, seed=6, children=3)
+    # Water jars by the wall.
+    for x, y, s in ((2.05, 2.0, 1.0), (1.6, 2.25, 0.72)):
+        jar = lathe("Jar", [(0.0, 0.0), (0.13, 0.0), (0.21, 0.16), (0.24, 0.34), (0.2, 0.52), (0.1, 0.62), (0.09, 0.7), (0.115, 0.73)])
+        jar.location, jar.scale = (x, y, 0.0), (s, s, s)
+        assign(jar, mats["clay"])
+    return new_objects(before)
+
+
+def oil_lamp(mats, loc, energy):
+    """A small clay lamp: a pinched saucer of olive oil with a wick at its lip."""
+    x, y, z = loc
+    assign(sphere("Lamp", 0.055, (x, y, z + 0.022), scale=(1.15, 0.9, 0.42), segments=20), mats["clay"])
+    assign(sphere("LampSpout", 0.022, (x + 0.06, y, z + 0.026), scale=(1.3, 0.8, 0.6), segments=12), mats["clay"])
+    flame = sphere("LampFlame", 0.011, (x + 0.072, y, z + 0.062), scale=(0.8, 0.8, 2.1), segments=12)
+    assign(flame, mats["flame"])
+    flame.visible_shadow = False
+    point_light("LampLight", (x + 0.072, y, z + 0.075), energy, (1.0, 0.56, 0.2), radius=0.018)
+
+
+def manger(mats, rng):
+    """A feeding trough cut from a block of limestone, filled with straw; the child wrapped in
+    swaddling bands, as Luke describes."""
+    before = set(bpy.data.objects)
+    L, Wd, base, wall = 1.2, 0.6, 0.34, 0.26
+    for sx in (-1, 1):
+        s = cube("Footing", (0.3, Wd + 0.1, base - 0.08), (sx * 0.38, 0, (base - 0.08) / 2), bevel=0.04)
+        turn(s, (sx * 0.38, 0, 0), (0, 0, deg(rng.uniform(-6, 6))))
+        assign(s, mats["limestone"])
+    assign(cube("TroughFloor", (L, Wd, 0.14), (0, 0, base), bevel=0.035), mats["limestone"])
+    for sy in (-1, 1):
+        assign(cube("TroughSide", (L, 0.1, wall), (0, sy * (Wd / 2 - 0.05), base + 0.07 + wall / 2), bevel=0.035), mats["limestone"])
+    for sx in (-1, 1):
+        assign(cube("TroughEnd", (0.1, Wd, wall), (sx * (L / 2 - 0.05), 0, base + 0.07 + wall / 2), bevel=0.035), mats["limestone"])
+    top = base + 0.07 + wall
+    bed = sphere("StrawBed", 0.5, (0, 0, top - 0.06), scale=(1.12, 0.52, 0.2))
+    assign(bed, mats["straw"])
+    strands(bed, mats["straw"], 5200, 0.07, seed=3, children=3)
+    # The child: wrapped tightly from shoulders to feet, head resting towards his mother.
+    cz = top + 0.16
+    bundle = sphere("Swaddling", 0.5, (0.07, 0, cz), scale=(0.56, 0.25, 0.2))
+    assign(bundle, mats["swaddle"])
+    for i in range(7):                                                 # the bands themselves
+        x = -0.12 + i * 0.065
+        r = 0.105 * math.sqrt(max(0.05, 1 - ((x - 0.07) / 0.29) ** 2))
+        ring = curve_tube("Band", [(x + 0.03 * math.sin(a), 1.22 * r * math.cos(a), cz + 0.98 * r * math.sin(a))
+                                   for a in [2 * math.pi * k / 10 for k in range(10)]], 0.012, resolution=4, closed=True)
+        ring.data.materials.append(mats["swaddle"])
+    assign(sphere("ChildHead", 0.078, (-0.27, 0, cz + 0.045), scale=(1.05, 0.95, 0.98)), mats["child_skin"])
+    assign(sphere("ChildHair", 0.079, (-0.286, 0, cz + 0.056), scale=(0.94, 0.93, 0.9), segments=20), mats["child_hair"])
+    return new_objects(before)
+
+
+def house(mats, rng, w, d, h):
+    """A village house: thick walls of stone and mud plaster, a flat roof with a low parapet
+    (people slept and worked up there), a few small unglazed windows, sometimes an upper room."""
+    before = set(bpy.data.objects)
+    assign(cube("Walls", (w, d, h), (0, 0, h / 2), bevel=0.07), mats["plaster"])
+    for sx, sy, lx, ly in ((0, -1, w, 0.28), (0, 1, w, 0.28), (-1, 0, 0.28, d), (1, 0, 0.28, d)):
+        assign(cube("Parapet", (lx, ly, 0.42), (sx * (w / 2 - 0.14), sy * (d / 2 - 0.14), h + 0.2), bevel=0.06), mats["plaster"])
+    assign(cube("Door", (0.85, 0.12, 1.75), (rng.uniform(-w * 0.25, w * 0.25), -d / 2 - 0.02, 0.88)), mats["dark"])
+    for i in range(rng.choice([1, 2, 2, 3])):
+        lit = mats["window"] if rng.random() < 0.7 else mats["dark"]
+        if rng.random() < 0.6:
+            assign(cube("Window", (0.34, 0.1, 0.5), (rng.uniform(-w * 0.38, w * 0.38), -d / 2 - 0.02, h * rng.uniform(0.55, 0.72))), lit)
+        else:
+            sx = rng.choice([-1, 1])
+            assign(cube("Window", (0.1, 0.34, 0.5), (sx * (w / 2 + 0.02), rng.uniform(-d * 0.3, d * 0.3), h * rng.uniform(0.55, 0.72))), lit)
+    if rng.random() < 0.45:                                             # the "upper room"
+        uw, ud, uh = w * rng.uniform(0.45, 0.6), d * rng.uniform(0.5, 0.7), rng.uniform(2.0, 2.5)
+        ux, uy = rng.choice([-1, 1]) * (w - uw) / 2, (d - ud) / 2
+        assign(cube("UpperRoom", (uw, ud, uh), (ux, uy, h + uh / 2), bevel=0.06), mats["plaster"])
+        assign(cube("UpperWindow", (0.3, 0.1, 0.45), (ux, uy - ud / 2 - 0.02, h + uh * 0.6)), mats["window"] if rng.random() < 0.6 else mats["dark"])
+    if rng.random() < 0.55:                                             # outside stair to the roof
+        sx = rng.choice([-1, 1])
+        for i in range(int(h / 0.24)):
+            assign(cube("Step", (0.7, 0.3, 0.24 * (i + 1)), (sx * (w / 2 + 0.36), -d / 2 + 0.2 + i * 0.3, 0.12 * (i + 1)), bevel=0.03), mats["plaster"])
+    return new_objects(before)
+
+
+# ---------------------------------------------------------------------------
+# Animals
+# ---------------------------------------------------------------------------
+
+def sheep(mats, rng, lying=False, lamb=False):
+    """An Awassi sheep, the old breed of the region: cream fleece, brown face and legs, drooping
+    ears, a broad fat tail. Returns the root object it hangs from."""
+    before = set(bpy.data.objects)
+    z0 = 0.24 if lying else 0.6
+    tex = bpy.data.textures.get("WoolLumps") or bpy.data.textures.new("WoolLumps", "CLOUDS")
+    tex.noise_scale = 0.06
+    tex.noise_depth = 2
+
+    def woolly(name, radius, loc, scale, tilt=0.0):
+        o = sphere(name, radius, loc, scale=scale, segments=48)
+        o.rotation_euler = (0, deg(tilt), 0)
+        lumps = o.modifiers.new("Wool", "DISPLACE")
+        lumps.texture = tex
+        lumps.strength = 0.045
+        lumps.mid_level = 0.4
+        assign(o, mats["wool"])
+        return o
+
+    woolly("Body", 1.0, (0, 0, z0), (0.4, 0.215, 0.225))
+    woolly("Chest", 1.0, (0.22, 0, z0 + 0.02), (0.2, 0.19, 0.21))
+    woolly("Rump", 1.0, (-0.24, 0, z0 + 0.01), (0.19, 0.2, 0.2))
+    woolly("Neck", 1.0, (0.37, 0, z0 + 0.13), (0.11, 0.1, 0.17), tilt=-28)
+    woolly("Tail", 1.0, (-0.42, 0, z0 - 0.07), (0.07, 0.085, 0.12))
+    hx, hz = 0.5, z0 + 0.25
+    head = sphere("Head", 1.0, (hx, 0, hz), scale=(0.135, 0.07, 0.078), segments=24)
+    head.rotation_euler = (0, deg(24), 0)
+    assign(head, mats["sheep_face"])
+    for sy in (-1, 1):
+        ear = sphere("Ear", 0.045, (hx - 0.07, sy * 0.082, hz + 0.0), scale=(0.75, 0.3, 1.45), segments=12)
+        ear.rotation_euler = (deg(sy * 30), 0, 0)
+        assign(ear, mats["sheep_face"])
+        assign(sphere("SheepEye", 0.012, (hx + 0.035, sy * 0.058, hz + 0.02), segments=8), mats["dark"])
+    if lying:
+        for sy in (-1, 1):                                              # forelegs folded under the chest
+            tube("Leg", [(0.2, sy * 0.1, 0.07), (0.36, sy * 0.11, 0.05), (0.3, sy * 0.13, 0.03)], 0.03, mats["sheep_face"], resolution=4)
+    else:
+        for x in (-0.25, 0.25):
+            for sy in (-1, 1):
+                tube("Leg", [(x, sy * 0.1, z0 - 0.1), (x + 0.012, sy * 0.1, 0.24), (x, sy * 0.1, 0.0)], 0.03, mats["sheep_face"], resolution=4)
+    return group(new_objects(before), scale=0.6 if lamb else 1.0)
+
+
+def with_children(root):
+    return [root] + [o for o in bpy.data.objects if o.parent is not None and (o.parent is root or o.parent.parent is root)]
+
+
+def watch_fire(mats, rng):
+    before = set(bpy.data.objects)
+    for i in range(9):
+        a = 2 * math.pi * i / 9
+        s = boulder(rng, mats["limestone"], rng.uniform(0.11, 0.17))
+        s.location = (0.48 * math.cos(a), 0.48 * math.sin(a), 0.06)
+    for i in range(5):
+        a = rng.uniform(0, 3.14)
+        tube("Log", [(-0.32 * math.cos(a), -0.32 * math.sin(a), 0.05), (0.32 * math.cos(a), 0.32 * math.sin(a), 0.16)], 0.045, mats["timber"], resolution=3)
+    for i in range(6):
+        bpy.ops.mesh.primitive_cone_add(vertices=10, radius1=rng.uniform(0.06, 0.13), radius2=0.0, depth=rng.uniform(0.3, 0.62),
+                                        location=(rng.uniform(-0.15, 0.15), rng.uniform(-0.15, 0.15), 0.4))
+        f = bpy.context.object
+        f.name = "Flame"
+        assign(f, mats["fire"])
+        f.visible_shadow = False
+    point_light("FireLight", (0, 0, 0.55), 900, (1.0, 0.45, 0.12), radius=0.25)
+    return new_objects(before)
 
 
 def anchors(scene, cam):
-    """Where the stable lands in the picture, as fractions of its width and height.
-    countdown.js hangs the Star of Bethlehem over it, so copy these into SCENE there."""
+    """Where the shelter lands in the picture, as fractions of its width and height.
+    countdown.js hangs the Star of Bethlehem over it, so copy these into COUNTDOWN_LAND there."""
     from bpy_extras.object_utils import world_to_camera_view
-    for label, p in [("roof", STABLE + Vector((0, 0, 4.0))), ("manger", STABLE + Vector((0, -0.55, 0.9))),
-                     ("ground", STABLE + Vector((0, -1.6, 0.0)))]:
+    for label, p in [("roof", Vector((0, 0.9, ROOF + 0.75))), ("manger", Vector((0.1, 0.55, 0.75)))]:
         v = world_to_camera_view(scene, cam, p)
         print(f"[art] anchor {label} x={v.x:.4f} y={1 - v.y:.4f}")
 
 
+# ---------------------------------------------------------------------------
+# The scene
+# ---------------------------------------------------------------------------
+
 def land():
     reset()
-    setup_render(res=1440, samples=224)
+    setup_render(res=1440, samples=256)
     s = bpy.context.scene
     s.render.resolution_x, s.render.resolution_y = 2560, 1440
     s.view_settings.look = "AgX - Medium High Contrast"
-    s.view_settings.exposure = 0.0
-    world(0.035, 0.065, 0.16, 0.5)                 # night-sky ambient
-    rng = random.Random(25)
-    people = figures.people()                      # first, while the scene is empty (cloth is draped on them)
+    s.view_settings.exposure = 0.35
+    world(0.03, 0.05, 0.12, 0.2)                   # a clear night sky
+    rng = random.Random(1)
+    cast = figures.people()                        # first, while the scene is empty (cloth is draped on them)
+    mats = materials()
 
-    terrain()
-    mountains()
+    terrain(mats)
+    rock_face(mats)
 
-    # Starlight from high behind the stable (the Star of Bethlehem hangs above it), plus a faint
-    # cool fill from the front so shaded snow keeps its shape.
-    sun("Starlight", (-0.3, -0.78, -0.55), 2.4, (0.66, 0.77, 1.0), angle=1.5)
-    sun("SkyFill", (0.25, 0.8, -0.55), 0.22, (0.5, 0.62, 1.0), angle=40)
+    # Starlight from high above and behind the shelter, and a faint cool fill from the front.
+    sun("Starlight", (-0.28, -0.62, -0.73), 0.42, (0.66, 0.77, 1.0), angle=1.5)
+    sun("SkyFill", (0.3, 0.8, -0.5), 0.07, (0.5, 0.62, 1.0), angle=40)
 
-    # Forest: four fir shapes, instanced many times.
-    fir_mats = {"needles": hero.needle_material(), "snow": snow_material("BoughSnow"),
-                "bark": principled("Bark", (0.035, 0.02, 0.012), roughness=0.9)}
-    firs = []
-    for i, (H, R) in enumerate([(9.5, 2.5), (12.0, 2.8), (7.5, 2.2), (14.0, 3.1)]):
-        firs.append(into_collection(fir(rng, fir_mats, H=H, R=R, tiers=11 + 2 * i), f"Fir{i}"))
+    # --- The shelter and everyone in it -------------------------------------
+    shelter(mats, rng)
+    group(manger(mats, rng), (0.1, 0.55, 0.0), yaw=4)
+    places = {
+        "Mary": ((-0.82, 0.78, 0.0), 58),          # kneeling at the child's head
+        "Joseph": ((0.92, 1.28, 0.0), -26),        # standing behind, watching over them
+        "Shepherd": ((-1.5, -0.42, 0.0), 124),     # on his knees, hands together
+        "Youth": ((1.42, -0.5, 0.0), -128),        # the boy
+        "Elder": ((2.0, 0.62, 0.0), -74),          # the old man on his staff
+    }
+    for name, (loc, yaw) in places.items():
+        cast[name].location = loc
+        cast[name].rotation_euler = (0, 0, deg(yaw))
+    # Quieter weaves than the cast was built with: bold stripes read as a pattern, not as wool.
+    plain = {"WoolDark": "WoolBrown"}
+    for o in bpy.data.objects:
+        if o.type in ("MESH", "CURVE"):
+            for slot in o.material_slots:
+                if slot.material and slot.material.name in plain:
+                    slot.material = bpy.data.materials[plain[slot.material.name]]
+    # Lamps: one on a stone by the manger, one on a ledge of the wall; and the gentle light
+    # painters have always let fall from the child.
+    stone = boulder(rng, mats["limestone"], 0.2)
+    stone.location = (-0.85, -1.45, 0.08)
+    oil_lamp(mats, (-0.85, -1.45, 0.19), 260)
+    # The glow of the fold's own small fire, off to the left of the picture, on the near side.
+    spot = bpy.data.lights.new("Embers", "SPOT")
+    spot.energy, spot.color, spot.spot_size, spot.spot_blend, spot.shadow_soft_size = 2600, (1.0, 0.58, 0.26), deg(34), 0.7, 0.5
+    ember = bpy.data.objects.new("Embers", spot)
+    bpy.context.collection.objects.link(ember)
+    ember.location = (-3.5, -9.5, 2.6)
+    look_at(ember, (0.2, 0.3, 0.8))
+    assign(cube("Ledge", (0.34, 0.4, 0.09), (2.3, 1.55, 1.36), bevel=0.03), mats["limestone"])
+    oil_lamp(mats, (2.24, 1.55, 1.41), 170)
+    oil_lamp(mats, (-2.2, 1.9, 1.02), 120)         # a third, set on the hay-side wall
+    point_light("MangerLight", (0.05, 0.2, 1.2), 11, (1.0, 0.84, 0.62), radius=0.1)
 
-    def scatter(count, x_range, y_range, keep, scale=(0.75, 1.25)):
-        placed = 0
-        tries = 0
-        while placed < count and tries < count * 30:
-            tries += 1
-            x = rng.uniform(*x_range)
-            y = rng.uniform(*y_range)
-            if not keep(x, y):
-                continue
-            instance(rng.choice(firs), (x, y, ground_height(x, y) - 0.25), rng.uniform(0, 6.28), rng.uniform(*scale))
-            placed += 1
+    # Sheep come in with the shepherds: a lamb near the manger, two ewes at the edge.
+    for kind, loc, yaw in ((dict(lamb=True), (0.55, -1.5, 0.0), 118),
+                           (dict(), (-3.1, -0.9, 0.0), 12),
+                           (dict(), (3.25, -1.25, 0.0), 158)):
+        root = sheep(mats, rng, **kind)
+        root.location = loc
+        root.rotation_euler = (0, 0, deg(yaw))
 
-    # The chapel stands at the heart of the village, far enough back that its spire stays clear
-    # of the clock that countdown.js sets over the left of the picture; cabins gather round it.
-    homes = [(-7, 62, 8), (-31, 30, 16), (-14, 22, 22), (-47, 48, 14), (-26, 54, 6), (-40, 74, 10),
-             (13, 60, -4), (27, 40, -14), (43, 54, -18), (24, 76, -6), (58, 78, -14), (-3, 38, 4)]
+    # --- The ground near at hand ---------------------------------------------
+    rng = random.Random(2)
+    stones = [into_collection([boulder(rng, mats["limestone"], sz)], f"Stone{i}") for i, sz in enumerate((0.12, 0.2, 0.32, 0.5))]
+    tuft_obj = sphere("Tuft", 0.16, (0, 0, -0.1), scale=(1, 1, 0.5), segments=8)
+    assign(tuft_obj, mats["earth"])
+    strands(tuft_obj, mats["dry_grass"], 140, 0.2, children=4, thickness=0.004, random_dir=0.3)
+    tuft = into_collection([tuft_obj], "Tuft")
+    for i in range(1500):
+        x, y = rng.uniform(-34, 16), rng.uniform(-15, 46) if i % 3 else rng.uniform(-15, 0)
+        if math.hypot(x, y - 0.6) < 3.6 or (abs(x) < 3 and -15 < y < -1):
+            continue
+        z = ground_height(x, y)
+        if rng.random() < 0.5:
+            instance(rng.choice(stones[:3] if rng.random() < 0.93 else stones), (x, y, z - 0.03), rng.uniform(0, 6.28), rng.uniform(0.4, 1.3))
+        else:
+            instance(tuft, (x, y, z), rng.uniform(0, 6.28), rng.uniform(0.7, 1.6))
+
+    # --- Trees ------------------------------------------------------------------
+    rng = random.Random(3)
+    olives = [into_collection(olive(rng, mats, size), f"Olive{i}") for i, size in enumerate((1.0, 1.25, 0.85))]
+    cyp = into_collection(cypress(mats), "CypressTree")
 
     def sightline(x, y, tx, ty, width):
-        """True when (x, y) stands between the camera and (tx, ty), within `width` of the line of sight."""
         dx, dy = tx - CAM.x, ty - CAM.y
         t = ((x - CAM.x) * dx + (y - CAM.y) * dy) / (dx * dx + dy * dy)
         return 0.0 < t < 1.0 and math.hypot(x - (CAM.x + t * dx), y - (CAM.y + t * dy)) < width
 
-    def clear(x, y):
-        if any(math.hypot(x - hx, y - hy) < 10.0 or sightline(x, y, hx, hy, 5.5) for hx, hy, _ in homes):
-            return False
-        return math.hypot(x - STABLE.x, y - STABLE.y) > 12.0 and not sightline(x, y, STABLE.x, STABLE.y + 14.0, 6.5)
+    for x, y, sc in ((-11.2, -1.5, 1.15), (-8.5, 9.0, 0.95), (5.6, 8.5, 1.0), (9.5, 6.0, 1.2)):
+        instance(olives[int(abs(x)) % 3], (x, y, ground_height(x, y)), rng.uniform(0, 6.28), sc)
+    placed = 0
+    while placed < 95:
+        x, y = rng.uniform(-120, 30), rng.uniform(16, 150)
+        if sightline(x, y, FIRE.x, FIRE.y, 5) or math.hypot(x - FIRE.x, y - FIRE.y) < 7 or math.hypot(x - TOWN.x, y - TOWN.y) < 30:
+            continue
+        instance(rng.choice(olives), (x, y, ground_height(x, y)), rng.uniform(0, 6.28), rng.uniform(0.8, 1.4))
+        placed += 1
+    for i in range(11):
+        a = rng.uniform(0, 6.28)
+        x, y = TOWN.x + math.cos(a) * rng.uniform(14, 42), TOWN.y + math.sin(a) * rng.uniform(10, 30)
+        instance(cyp, (x, y, ground_height(x, y) - 0.2), 0, rng.uniform(0.8, 1.3))
 
-    # A few big firs frame the picture, more stand among the houses, then forested hills.
-    for x, y, sc in [(-14.0, -8.0, 1.25), (-19.5, 1.0, 1.0), (13.2, -5.0, 1.1), (17.5, 4.0, 0.9), (-26.0, 12.0, 1.1)]:
-        instance(firs[int(abs(x)) % 4], (x, y, ground_height(x, y) - 0.25), rng.uniform(0, 6.28), sc)
-    scatter(40, (-80, 80), (14, 84), clear)
-    scatter(170, (-190, 190), (84, 190), lambda x, y: abs(x) > 6, scale=(0.8, 1.5))
-    scatter(260, (-380, 380), (190, 400), lambda x, y: True, scale=(0.9, 1.7))
+    # --- Bethlehem ---------------------------------------------------------------
+    rng = random.Random(5)
+    homes = [into_collection(house(mats, rng, w, d, h), f"House{i}")
+             for i, (w, d, h) in enumerate(((6.5, 5.5, 3.4), (8.0, 6.0, 3.8), (5.0, 5.0, 3.0), (7.0, 7.5, 4.2), (9.5, 6.5, 3.6), (5.5, 4.5, 5.6)))]
+    spots = []
+    tries = 0
+    while len(spots) < 44 and tries < 4000:
+        tries += 1
+        x, y = TOWN.x + rng.gauss(0, 24), TOWN.y + rng.gauss(0, 15)
+        if all(math.hypot(x - px, y - py) > 8.5 for px, py in spots):
+            spots.append((x, y))
+    spots += [(-27.0, 66.0), (-36.0, 74.0), (-19.0, 82.0), (-58.0, 80.0)]          # a few houses below the village
+    for x, y in spots:
+        instance(rng.choice(homes), (x, y, ground_height(x, y) - 0.25), deg(rng.uniform(-40, 40) + rng.choice([0, 0, 90])), rng.uniform(0.9, 1.1))
 
-    # The village.
-    mats = {
-        "logs": log_material(),
-        "plaster": principled("Plaster", (0.72, 0.7, 0.66), roughness=0.85),
-        "trim": principled("Trim", (0.035, 0.018, 0.01), roughness=0.7),
-        "stone": principled("Stone", (0.11, 0.105, 0.1), roughness=0.9),
-        "snow": snow_material("RoofSnow"),
-        "glow": principled("WindowGlow", (1.0, 0.72, 0.35), emission=(1.0, 0.6, 0.22), emission_strength=7.5),
-        "lantern": principled("LanternGlow", (1.0, 0.8, 0.5), emission=(1.0, 0.7, 0.3), emission_strength=30),
-    }
-    add_bump(mats["stone"], scale=9.0, strength=0.6)
-    cabins = [into_collection(cabin(mats, rng, W=w, D=d, wall_h=hh, rise=r), f"Cabin{i}")
-              for i, (w, d, hh, r) in enumerate([(7.0, 5.5, 2.9, 2.3), (8.5, 6.0, 3.0, 2.7), (6.0, 5.0, 2.8, 2.6)])]
-    church = into_collection(chapel(mats), "Chapel")
-    for i, (x, y, yaw) in enumerate(homes):
-        coll = church if i == 0 else cabins[i % 3]
-        instance(coll, (x, y, ground_height(x, y) - 0.12), deg(yaw), 0.8 if i == 0 else 1.0)
+    # --- The shepherds' watch fire, out in the fields ------------------------------
+    rng = random.Random(6)
+    group(watch_fire(mats, rng), (FIRE.x, FIRE.y, FIRE_LEVEL))
+    flock = [into_collection(with_children(sheep(mats, rng, lying=lying)), f"Flock{i}") for i, lying in enumerate((False, True))]
+    for i in range(14):
+        a, r = rng.uniform(0, 6.28), rng.uniform(2.2, 7.5)
+        x, y = FIRE.x + r * math.cos(a), FIRE.y + r * math.sin(a)
+        instance(flock[i % 2], (x, y, ground_height(x, y)), rng.uniform(0, 6.28), rng.uniform(0.9, 1.1))
 
-    nat = {
-        "timber": principled("Timber", (0.06, 0.03, 0.015), roughness=0.85),
-        "planks": log_material(),
-        "straw": principled("Straw", (0.5, 0.36, 0.12), roughness=0.7),
-        "earth": principled("StrawFloor", (0.3, 0.2, 0.07), roughness=0.9),
-        "snow": mats["snow"],
-        "lantern": mats["lantern"],
-        "skin": principled("ChildSkin", SKIN, roughness=0.55),
-        "swaddle": cloth("Swaddling", (0.86, 0.83, 0.76)),
-    }
-    add_bump(nat["timber"], scale=14.0, strength=0.5, detail=8.0)
-    bsdf(nat["planks"]).inputs["Base Color"].default_value = (0.075, 0.04, 0.02, 1)
-    stable(nat, random.Random(7), people)
-
-    cam = camera(tuple(CAM), (0, 0.9, 6.8), lens=30)
+    cam = camera(tuple(CAM), tuple(LOOK), lens=35)
     bpy.context.view_layer.update()
     anchors(s, cam)
     render(os.path.join(OUT, "countdown-land.png"))

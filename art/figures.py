@@ -1,4 +1,4 @@
-"""People for the Nativity in countdown.py: Mary kneeling in prayer, Joseph standing with his staff.
+"""People for the Nativity in countdown.py: Mary, Joseph and three shepherds.
 
 Each starts from an anatomical body (Blender Studio's "Human Base Meshes" bundle, CC0 — public
 domain; art/render.sh fetches it into a cache folder, it is not kept in this repo), is given a
@@ -7,6 +7,10 @@ that are real cloth, dropped onto the figure and left to fall under gravity so t
 
 Run on its own for a studio look at the two figures:
     Blender -b --factory-startup -P art/figures.py -- art/build
+
+Dress follows what ordinary people of first-century Judea wore: an ankle-length wool tunic tied
+with a cord, a rectangular wool mantle over the shoulders or head, bare feet or sandals, men
+bearded, heads wrapped against the night cold. Cloth is undyed or earth-dyed.
 """
 import os
 import sys
@@ -44,6 +48,23 @@ def load_body(kind):
     body.modifiers.clear()
     body.location = (0, 0, 0)
     bpy.context.view_layer.update()
+    # Slot 0 is skin (filled in later); the eyes bring their own painted material as slot 1.
+    body.data.materials.clear()
+    body.data.materials.append(None)
+    body.data.color_attributes.new("EyeCol", "FLOAT_COLOR", "POINT")
+    body.data.attributes.new("IsEye", "FLOAT", "POINT")
+    for eye in eyes:
+        flag = eye.data.attributes.new("IsEye", "FLOAT", "POINT")
+        for item in flag.data:
+            item.value = 1.0
+        col = eye.data.color_attributes.new("EyeCol", "FLOAT_COLOR", "POINT")
+        centre = eye.matrix_world.translation
+        for v in eye.data.vertices:
+            forward = -((eye.matrix_world @ v.co) - centre).normalized().y      # 1 = looking straight ahead
+            col.data[v.index].color = ((0.0, 0.0, 0.0, 1) if forward > 0.93 else (0.045, 0.022, 0.01, 1)
+                                       if forward > 0.7 else (0.3, 0.27, 0.25, 1))
+        eye.data.materials.clear()
+        eye.data.materials.append(eye_material())
     select_only(*eyes, body)
     bpy.ops.object.join()
     body = bpy.context.object
@@ -51,6 +72,17 @@ def load_body(kind):
     for p in body.data.polygons:
         p.use_smooth = True
     return body
+
+
+def eye_material():
+    m = bpy.data.materials.get("Eye")
+    if m:
+        return m
+    m = principled("Eye", (0.6, 0.58, 0.55), roughness=0.06, coat=1.0, coat_rough=0.02)
+    attr = m.node_tree.nodes.new("ShaderNodeAttribute")
+    attr.attribute_name = "EyeCol"
+    m.node_tree.links.new(attr.outputs["Color"], bsdf(m).inputs["Base Color"])
+    return m
 
 
 def skeleton(body):
@@ -97,8 +129,15 @@ def skeleton(body):
     bpy.ops.object.mode_set(mode="OBJECT")
     select_only(body, rig)
     bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    # The eyes are loose spheres inside the head: make them follow the head bone exactly.
+    is_eye = body.data.attributes["IsEye"].data
+    eye_verts = [v.index for v in body.data.vertices if is_eye[v.index].value > 0.5]
+    for g in body.vertex_groups:
+        g.remove(eye_verts)
+    body.vertex_groups["head"].add(eye_verts, 1.0, "REPLACE")
     # Mark where hair and beard grow while the head is still upright and easy to measure.
-    head = [v for v in body.data.vertices if v.co.z > 0.86 * H and abs(v.co.x) < 0.12]
+    eye_set = set(eye_verts)
+    head = [v for v in body.data.vertices if v.co.z > 0.86 * H and abs(v.co.x) < 0.12 and v.index not in eye_set]
     mid_y = (min(v.co.y for v in head) + max(v.co.y for v in head)) / 2
     # The hairline sits well above the brow at the front and comes down behind the ears.
     scalp = [v.index for v in head if v.co.z > 0.976 * H or (v.co.y > mid_y + 0.012 and v.co.z > 0.9 * H)
@@ -226,8 +265,9 @@ def tunic(body, mat):
     return t
 
 
-def grid_cloth(name, width, length, nx, ny, origin, pin):
-    """A flat rectangle of cloth lying level. `pin(x, y)` says which points are held in place."""
+def grid_cloth(name, width, length, nx, ny, origin, pin, hole=None):
+    """A flat rectangle of cloth lying level. `pin(x, y)` says which points are held in place;
+    `hole(x, y)` cuts an opening (the slot a mantle needs to sit round the neck)."""
     verts, faces = [], []
     for j in range(ny + 1):
         for i in range(nx + 1):
@@ -235,6 +275,10 @@ def grid_cloth(name, width, length, nx, ny, origin, pin):
     for j in range(ny):
         for i in range(nx):
             a = j * (nx + 1) + i
+            cx = (verts[a][0] + verts[a + nx + 2][0]) / 2
+            cy = (verts[a][1] + verts[a + nx + 2][1]) / 2
+            if hole and hole(cx, cy):
+                continue
             faces.append((a, a + 1, a + nx + 2, a + nx + 1))
     me = bpy.data.meshes.new(name)
     me.from_pydata(verts, [], faces)
@@ -348,10 +392,116 @@ def ground_plane():
     return g
 
 
-def cloth_material(name, color):
-    m = principled(name, color, roughness=0.7, sheen=0.35)
-    add_bump(m, scale=140.0, strength=0.1, detail=2.0)
+def cloth_material(name, color, stripe=None):
+    """Hand-woven wool: uneven colour, a visible weave, optionally a few darker woven stripes."""
+    m = principled(name, color, roughness=0.82, sheen=0.5)
+    nt = m.node_tree
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    blotch = nt.nodes.new("ShaderNodeTexNoise")
+    blotch.inputs["Scale"].default_value = 6.0
+    blotch.inputs["Detail"].default_value = 6.0
+    shade = nt.nodes.new("ShaderNodeMixRGB")
+    shade.blend_type = "MULTIPLY"
+    shade.inputs["Fac"].default_value = 0.55
+    shade.inputs["Color1"].default_value = (*color, 1)
+    nt.links.new(tc.outputs["Object"], blotch.inputs["Vector"])
+    nt.links.new(blotch.outputs["Fac"], shade.inputs["Color2"])
+    out = shade.outputs["Color"]
+    if stripe:
+        wave = nt.nodes.new("ShaderNodeTexWave")
+        wave.bands_direction = "Z"
+        wave.inputs["Scale"].default_value = 2.2
+        wave.inputs["Distortion"].default_value = 0.6
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        ramp.color_ramp.elements[0].position = 0.86
+        ramp.color_ramp.elements[1].position = 0.9
+        band = nt.nodes.new("ShaderNodeMixRGB")
+        band.inputs["Color2"].default_value = (*stripe, 1)
+        nt.links.new(tc.outputs["Object"], wave.inputs["Vector"])
+        nt.links.new(wave.outputs["Fac"], ramp.inputs["Fac"])
+        nt.links.new(ramp.outputs["Color"], band.inputs["Fac"])
+        nt.links.new(out, band.inputs["Color1"])
+        out = band.outputs["Color"]
+    nt.links.new(out, bsdf(m).inputs["Base Color"])
+    weave = nt.nodes.new("ShaderNodeTexWave")
+    weave.inputs["Scale"].default_value = 190.0
+    weave.inputs["Distortion"].default_value = 2.0
+    bump = nt.nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.35
+    nt.links.new(tc.outputs["Object"], weave.inputs["Vector"])
+    nt.links.new(weave.outputs["Fac"], bump.inputs["Height"])
+    nt.links.new(bump.outputs["Normal"], bsdf(m).inputs["Normal"])
     return m
+
+
+def skin_material(name, color):
+    m = principled(name, color, roughness=0.48, specular=0.4)
+    b = bsdf(m)
+    b.inputs["Subsurface Weight"].default_value = 0.22
+    b.inputs["Subsurface Radius"].default_value = (0.9, 0.35, 0.2)
+    b.inputs["Subsurface Scale"].default_value = 0.012
+    add_bump(m, scale=420.0, strength=0.05, detail=2.0)
+    return m
+
+
+def strands(obj, mat, count, length, curl=0.0, children=24, seed=1, thickness=0.0035):
+    """Real hair (or a fleece) growing from every face of `obj`."""
+    if mat.name not in [s.name for s in obj.material_slots]:
+        obj.data.materials.append(mat)
+    obj.modifiers.new("Strands", "PARTICLE_SYSTEM")
+    ps = obj.particle_systems[-1]
+    ps.seed = seed
+    pt = ps.settings
+    pt.type = "HAIR"
+    pt.count = count
+    pt.hair_length = length
+    pt.emit_from = "FACE"
+    pt.use_advanced_hair = True
+    pt.normal_factor = 0.01
+    pt.factor_random = 0.004
+    pt.child_type = "INTERPOLATED"
+    pt.rendered_child_count = children
+    pt.child_length = 1.0
+    pt.clump_factor = 0.3
+    pt.roughness_2 = 0.003
+    pt.roughness_endpoint = 0.002
+    if curl:
+        pt.kink = "CURL"
+        pt.kink_amplitude = curl
+        pt.kink_frequency = 3.0
+    pt.root_radius = 1.0
+    pt.tip_radius = 0.25
+    pt.radius_scale = thickness
+    pt.material_slot = mat.name
+
+
+def head_wrap(body, mat, rng, loops=6):
+    """A length of cloth wound round the head, as a man would against the night cold."""
+    crown, _ = brow(body)
+    made = []
+    for k in range(loops):
+        z = crown.z - 0.105 + 0.085 * k / (loops - 1)
+        ring = [v.co for v in body.data.vertices if abs(v.co.z - z) < 0.012 and (v.co - crown).length < 0.2]
+        if len(ring) < 8:
+            continue
+        cx = (min(v.x for v in ring) + max(v.x for v in ring)) / 2
+        cy = (min(v.y for v in ring) + max(v.y for v in ring)) / 2
+        rx = (max(v.x for v in ring) - min(v.x for v in ring)) / 2 + 0.014
+        ry = (max(v.y for v in ring) - min(v.y for v in ring)) / 2 + 0.014
+        tilt, phase = rng.uniform(-0.016, 0.016), rng.uniform(0, 6.28)
+        pts = [(cx + rx * math.cos(a), cy + ry * math.sin(a), z + tilt * math.sin(a + phase) + 0.004 * math.sin(3 * a + phase))
+               for a in [2 * math.pi * i / 18 for i in range(18)]]
+        o = curve_tube("Wrap", pts, 0.021 + rng.uniform(-0.003, 0.004), resolution=6, closed=True)
+        o.data.materials.append(mat)
+        made.append(o)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.085, location=(crown.x, crown.y + 0.01, crown.z - 0.03), segments=24, ring_count=12)
+    cap = bpy.context.object
+    cap.name = "WrapCrown"
+    cap.scale = (1.0, 1.12, 0.62)
+    for p in cap.data.polygons:
+        p.use_smooth = True
+    assign(cap, mat)
+    return made + [cap]
 
 
 def rope_belt(z, rx, ry, y, mat):
@@ -364,7 +514,7 @@ def rope_belt(z, rx, ry, y, mat):
 def finish_body(body, rig, skin):
     freeze(body)
     bpy.data.objects.remove(rig, do_unlink=True)
-    assign(body, skin)
+    body.data.materials[0] = skin
     collide(body)
 
 
@@ -377,149 +527,249 @@ def root_of(objs, name):
     return root
 
 
-def mary(mats):
-    """Kneeling, hands together, head bowed; cream tunic, blue mantle over her head and shoulders."""
-    before = set(bpy.data.objects)
-    body = load_body("female")
-    rig, j = skeleton(body)
-    H, sz = j["H"], j["shoulder"].z
-    # Kneel upright, shins folded back under her.
+def kneel(rig):
     for side in ("L", "R"):
         pitch(rig, f"shin.{side}", 96)
         pitch(rig, f"foot.{side}", 55)
-    pitch(rig, "spine", 7)
-    pitch(rig, "chest", 7)
-    pitch(rig, "neck", 14)
-    pitch(rig, "head", 16)
+
+
+def bow(rig, spine=0, chest=0, neck=0, head=0):
+    for bone, angle in (("spine", spine), ("chest", chest), ("neck", neck), ("head", head)):
+        if angle:
+            pitch(rig, bone, angle)
     bpy.context.view_layer.update()
+
+
+def shoulder(rig, side):
+    return rig.matrix_world @ rig.pose.bones[f"upper_arm.{side}"].head
+
+
+def pose_mary(rig):
+    """Kneeling over the manger: one hand reaching to the child, the other at her heart."""
+    kneel(rig)
+    bow(rig, spine=9, chest=8, neck=10, head=12)
+    s = shoulder(rig, "R")
+    w = reach(rig, "R", (s.x + 0.04, s.y - 0.36, s.z - 0.2), (-0.5, 0.3, -1.0))
+    aim(rig, "hand.R", w + Vector((0.03, -0.12, -0.07)))
+    s = shoulder(rig, "L")
+    w = reach(rig, "L", (0.05, s.y - 0.16, s.z - 0.17), (0.6, 0.3, -1.0))
+    aim(rig, "hand.L", w + Vector((-0.15, -0.02, 0.06)))
+    return {"kneel": True}
+
+
+def pose_joseph(rig):
+    """Standing over mother and child, staff in his right hand, left hand on his heart."""
+    bow(rig, chest=6, neck=12, head=15)
+    s = shoulder(rig, "R")
+    w = reach(rig, "R", (s.x - 0.07, s.y - 0.27, s.z - 0.27), (-0.4, 0.5, -1.0))
+    aim(rig, "hand.R", w + Vector((0.05, -0.1, -0.02)))
+    staff = w + Vector((0.02, -0.075, 0.0))
+    s = shoulder(rig, "L")
+    w = reach(rig, "L", (0.07, s.y - 0.15, s.z - 0.2), (0.6, 0.3, -1.0))
+    aim(rig, "hand.L", w + Vector((-0.16, -0.01, 0.05)))
+    return {"staff": staff, "staff_top": 1.9}
+
+
+def pose_praying(rig):
+    """A shepherd on his knees, hands pressed together."""
+    kneel(rig)
+    bow(rig, spine=9, chest=7, neck=10, head=9)
     for side, sx in (("L", 1), ("R", -1)):
-        s_head = rig.matrix_world @ rig.pose.bones[f"upper_arm.{side}"].head
-        w = reach(rig, side, (sx * 0.018, s_head.y - 0.2, s_head.z - 0.13), (sx * 0.5, 0.25, -1.0))
+        s = shoulder(rig, side)
+        w = reach(rig, side, (sx * 0.018, s.y - 0.21, s.z - 0.14), (sx * 0.5, 0.25, -1.0))
         aim(rig, f"hand.{side}", Vector((sx * 0.006, w.y - 0.07, w.z + 0.2)))
-    knee_z = min((rig.matrix_world @ rig.pose.bones[f"shin.{s}"].head).z for s in ("L", "R"))
-    drop = knee_z - 0.055
-    finish_body(body, rig, mats["skin"])
-    hair(body, "Scalp", mats["hair"])
-    for o in (body, bpy.data.objects["Scalp"]):
+    return {"kneel": True}
+
+
+def pose_youth(rig):
+    """A boy kneeling, hands resting on his knees, looking at the child."""
+    kneel(rig)
+    bow(rig, spine=5, chest=4, neck=7, head=5)
+    for side, sx in (("L", 1), ("R", -1)):
+        s = shoulder(rig, side)
+        w = reach(rig, side, (sx * 0.1, s.y - 0.15, s.z - 0.47), (sx * 0.6, 0.6, -0.6))
+        aim(rig, f"hand.{side}", w + Vector((0.0, -0.1, -0.1)))
+    return {"kneel": True}
+
+
+def pose_elder(rig):
+    """An old shepherd standing bent over his staff, both hands on it."""
+    bow(rig, spine=8, chest=9, neck=10, head=9)
+    s = shoulder(rig, "R")
+    w = reach(rig, "R", (-0.035, s.y - 0.31, s.z - 0.16), (-0.6, 0.3, -1.0))
+    aim(rig, "hand.R", w + Vector((0.08, -0.06, -0.03)))
+    staff = Vector((0.0, w.y - 0.055, w.z))
+    s = shoulder(rig, "L")
+    w2 = reach(rig, "L", (0.035, s.y - 0.31, s.z - 0.26), (0.6, 0.3, -1.0))
+    aim(rig, "hand.L", w2 + Vector((-0.08, -0.06, -0.03)))
+    return {"staff": staff, "staff_top": 1.62}
+
+
+def figure(name, kind, pose, look, mats, seed=1):
+    """One dressed person. `look`: skin, tunic, mantle (None | ("head"|"shoulders", width, length,
+    material)), hair / beard (material names or None), fleece (the mantle is a sheepskin), wrap
+    (material of a head wrap or None), skirt_hem (radius)."""
+    import random
+    rng = random.Random(seed)
+    before = set(bpy.data.objects)
+    body = load_body(kind)
+    rig, j = skeleton(body)
+    H = j["H"]
+    info = pose(rig)
+    bpy.context.view_layer.update()
+    drop = 0.0
+    if info.get("kneel"):
+        drop = min((rig.matrix_world @ rig.pose.bones[f"shin.{s}"].head).z for s in ("L", "R")) - 0.055
+    finish_body(body, rig, mats[look["skin"]])
+    caps = []
+    if look.get("hair"):
+        caps.append(hair(body, "Scalp", mats[look["hair"]]))
+    if look.get("beard"):
+        caps.append(hair(body, "Beard", mats[look["beard"]], lift=0.008))
+    for o in [body] + caps:
         o.location.z -= drop
     bpy.context.view_layer.update()
-    select_only(bpy.data.objects["Scalp"], body)
+    select_only(*caps, body)
     bpy.ops.object.transform_apply(location=True)
 
     floor = ground_plane()
-    top = tunic(body, mats["cream"])
+    top = tunic(body, mats[look["tunic"]])
     collide(top)
     waist_z = 0.635 * H - drop
-    skirt = skirt_cloth("Skirt", waist_z + 0.03, 0.2, -0.22, 0.31, (0, 0.05, 0))
-    make_cloth(skirt, stiffness=7.0, bending=0.08)
-    settle([skirt], 60)
-    assign(skirt, mats["cream"])
-    rope_belt(waist_z + 0.01, 0.2, 0.17, 0.05, mats["rope"])
+    kneeling = bool(info.get("kneel"))
+    skirt = skirt_cloth("Skirt", waist_z + 0.03, 0.205, -0.22 if kneeling else 0.02, look.get("skirt_hem", 0.32),
+                        (0, 0.05 if kneeling else 0.02, 0))
+    make_cloth(skirt, stiffness=7.5, bending=0.1 if kneeling else 0.28)
+    settle([skirt], 55)
+    assign(skirt, mats[look["tunic"]])
+    rope_belt(waist_z + 0.01, 0.2, 0.168, 0.05 if kneeling else 0.02, mats["rope"])
 
-    crown, front = brow(body)
-    mantle = grid_cloth("Mantle", 1.34, 1.95, 62, 88, (crown.x, front + 0.02, crown.z + 0.03),
-                        lambda x, y: math.hypot(x - crown.x, y - crown.y) < 0.05)
-    make_cloth(mantle, stiffness=7.0, bending=0.2, mass=0.2)
-    settle([mantle], 75)
-    assign(mantle, mats["blue"])
-    bpy.data.objects.remove(floor, do_unlink=True)
-    made = [o for o in bpy.data.objects if o not in before]
-    polish(made)
-    return root_of(made, "Mary")
-
-
-def joseph(mats):
-    """Standing watch, staff in his right hand, left hand on his heart; brown tunic, ochre mantle."""
-    before = set(bpy.data.objects)
-    body = load_body("male")
-    rig, j = skeleton(body)
-    H = j["H"]
-    pitch(rig, "chest", 4)
-    pitch(rig, "neck", 10)
-    pitch(rig, "head", 12)
-    bpy.context.view_layer.update()
-    # Right arm (his right is -x): forearm forward to hold the staff.
-    s_head = rig.matrix_world @ rig.pose.bones["upper_arm.R"].head
-    w = reach(rig, "R", (s_head.x - 0.06, s_head.y - 0.27, s_head.z - 0.3), (-0.4, 0.5, -1.0))
-    aim(rig, "hand.R", w + Vector((0.05, -0.1, -0.02)))
-    staff_at = w + Vector((0.02, -0.075, 0.0))
-    # Left arm: hand resting on his heart.
-    s_head = rig.matrix_world @ rig.pose.bones["upper_arm.L"].head
-    w = reach(rig, "L", (0.07, s_head.y - 0.15, s_head.z - 0.2), (0.6, 0.3, -1.0))
-    aim(rig, "hand.L", w + Vector((-0.16, -0.01, 0.05)))
-    finish_body(body, rig, mats["skin"])
-    hair(body, "Scalp", mats["hair"])
-    hair(body, "Beard", mats["hair"], lift=0.014)
-
-    floor = ground_plane()
-    top = tunic(body, mats["brown"])
-    collide(top)
-    waist_z = 0.635 * H
-    skirt = skirt_cloth("Skirt", waist_z + 0.03, 0.21, 0.02, 0.33, (0, 0.02, 0))
-    make_cloth(skirt, stiffness=9.0, bending=0.3)
-    settle([skirt], 50)
-    assign(skirt, mats["brown"])
-    rope_belt(waist_z + 0.01, 0.2, 0.165, 0.02, mats["rope"])
-
-    crown, front = brow(body)
-    mantle = grid_cloth("Mantle", 1.4, 1.6, 64, 74, (crown.x, front + 0.02, crown.z + 0.03),
-                        lambda x, y: math.hypot(x - crown.x, y - crown.y) < 0.05)
-    make_cloth(mantle, stiffness=7.0, bending=0.22, mass=0.2)
-    settle([mantle], 75)
-    assign(mantle, mats["ochre"])
+    mantle = None
+    if look.get("mantle"):
+        how, width, length, mat = look["mantle"]
+        crown, front = brow(body)
+        if how == "head":
+            # Held over the crown and down to the hairline, so it cannot slip off a bowed head.
+            mantle = grid_cloth("Mantle", width, length, int(width * 46), int(length * 46), (crown.x, front + 0.005, crown.z + 0.03),
+                                lambda x, y: abs(x - crown.x) < 0.07 and front + 0.005 <= y < crown.y + 0.07)
+        else:
+            # Laid across the shoulders with a slot for the neck, held where a brooch or knot would be.
+            neck = [v.co for v in body.data.vertices if abs(v.co.z - (0.875 * H - drop)) < 0.012 and abs(v.co.x) < 0.1]
+            nx_, ny_ = sum(v.x for v in neck) / len(neck), sum(v.y for v in neck) / len(neck)
+            z = max(v.co.z for v in body.data.vertices if abs(v.co.x) > 0.1 and v.co.z < 0.9 * H - drop and abs(v.co.y - ny_) < 0.12) + 0.03
+            mantle = grid_cloth("Mantle", width, length, int(width * 46), int(length * 46), (nx_, ny_ - length * 0.42, z),
+                                lambda x, y: abs(abs(x - nx_) - 0.15) < 0.03 and abs(y - ny_) < 0.03,
+                                hole=lambda x, y: abs(x - nx_) < 0.085 and y < ny_ + 0.085)
+        make_cloth(mantle, stiffness=7.0, bending=0.2, mass=0.22)
+        settle([mantle], 72)
+        assign(mantle, mats[mat])
     bpy.data.objects.remove(floor, do_unlink=True)
 
-    staff = curve_tube("Staff", [(staff_at.x, staff_at.y, 0.0), (staff_at.x, staff_at.y, 1.0), (staff_at.x, staff_at.y, 1.84),
-                                 (staff_at.x + 0.03, staff_at.y, 1.95), (staff_at.x + 0.1, staff_at.y, 1.93)], 0.02, resolution=12)
-    staff.data.materials.append(mats["staff"])
+    if look.get("hair"):
+        strands(caps[0], mats[look["hair"]], 3600, look.get("hair_length", 0.011), curl=look.get("curl", 0.0), seed=seed)
+    if look.get("beard"):
+        strands(caps[-1], mats[look["beard"]], 2400, look.get("beard_length", 0.008), children=22, seed=seed + 1)
+    if look.get("fleece") and mantle:
+        strands(mantle, mats[look["fleece"]], 9000, 0.014, children=16, seed=seed + 2, thickness=0.005)
+    if look.get("wrap"):
+        head_wrap(body, mats[look["wrap"]], rng)
+    if info.get("staff") is not None:
+        p = info["staff"] - Vector((0, 0, drop))
+        top_z = info.get("staff_top", 1.85)
+        staff = curve_tube("Staff", [(p.x, p.y, 0.0), (p.x + 0.01, p.y, top_z * 0.5), (p.x, p.y + 0.005, top_z - 0.1),
+                                     (p.x + 0.02, p.y, top_z - 0.01), (p.x + 0.075, p.y, top_z - 0.03)], 0.019, resolution=12)
+        staff.data.materials.append(mats["staff"])
     made = [o for o in bpy.data.objects if o not in before]
     polish(made)
-    return root_of(made, "Joseph")
-
-
-def people():
-    """Mary and Joseph, built once and kept in art/build/nativity-figures.blend (draping the
-    cloth takes a few minutes); rebuilt whenever this file changes. Call in an empty scene."""
-    path = os.path.join(ART_DIR, "build", "nativity-figures.blend")
-    if os.path.exists(path) and os.path.getmtime(path) >= os.path.getmtime(os.path.abspath(__file__)):
-        with bpy.data.libraries.load(path) as (src, dst):
-            dst.objects = list(src.objects)
-        for o in dst.objects:
-            bpy.context.collection.objects.link(o)
-        print("[art] figures: reused " + path)
-        return bpy.data.objects["Mary"], bpy.data.objects["Joseph"]
-    before = set(bpy.data.objects)
-    mats = figure_materials()
-    m, j = mary(mats), joseph(mats)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    bpy.data.libraries.write(path, {o for o in bpy.data.objects if o not in before}, fake_user=True)
-    print("[art] figures: built and saved " + path)
-    return m, j
+    return root_of(made, name)
 
 
 def figure_materials():
     return {
-        "skin": principled("Skin", (0.5, 0.29, 0.2), roughness=0.5),
-        "hair": principled("Hair", (0.03, 0.017, 0.01), roughness=0.55),
-        "cream": cloth_material("Cream", (0.78, 0.72, 0.6)),
-        "blue": cloth_material("MaryBlue", (0.03, 0.09, 0.36)),
-        "brown": cloth_material("JosephBrown", (0.2, 0.09, 0.04)),
-        "ochre": cloth_material("JosephOchre", (0.42, 0.24, 0.07)),
+        "skin": skin_material("Skin", (0.44, 0.25, 0.165)),
+        "skin_fair": skin_material("SkinYoung", (0.5, 0.3, 0.21)),
+        "skin_old": skin_material("SkinWeathered", (0.36, 0.2, 0.13)),
+        "hair_dark": principled("HairDark", (0.018, 0.011, 0.007), roughness=0.4),
+        "hair_brown": principled("HairBrown", (0.05, 0.027, 0.014), roughness=0.4),
+        "hair_grey": principled("HairGrey", (0.3, 0.29, 0.27), roughness=0.5),
+        "linen": cloth_material("Linen", (0.6, 0.53, 0.4)),
+        "wool_cream": cloth_material("WoolCream", (0.62, 0.55, 0.42), stripe=(0.16, 0.1, 0.06)),
+        "wool_blue": cloth_material("WoolBlue", (0.07, 0.12, 0.24)),
+        "wool_brown": cloth_material("WoolBrown", (0.19, 0.1, 0.05)),
+        "wool_ochre": cloth_material("WoolOchre", (0.38, 0.23, 0.09), stripe=(0.12, 0.06, 0.03)),
+        "wool_grey": cloth_material("WoolGrey", (0.2, 0.18, 0.15)),
+        "wool_rust": cloth_material("WoolRust", (0.3, 0.11, 0.05)),
+        "wool_dark": cloth_material("WoolDark", (0.1, 0.075, 0.055), stripe=(0.3, 0.24, 0.16)),
+        "fleece": principled("Fleece", (0.56, 0.5, 0.4), roughness=0.9),
         "rope": principled("Rope", (0.3, 0.22, 0.12), roughness=0.8),
         "staff": principled("Staff", (0.1, 0.055, 0.025), roughness=0.75),
     }
 
 
+CAST = [
+    # name, body, pose, look, seed
+    ("Mary", "female", pose_mary, dict(skin="skin_fair", tunic="linen", mantle=("head", 1.34, 1.9, "wool_blue"),
+                                       hair="hair_dark"), 11),
+    ("Joseph", "male", pose_joseph, dict(skin="skin", tunic="wool_brown", mantle=("shoulders", 1.25, 1.5, "wool_ochre"),
+                                         hair="hair_dark", beard="hair_dark"), 12),
+    ("Shepherd", "male", pose_praying, dict(skin="skin", tunic="wool_grey", mantle=("shoulders", 1.2, 1.25, "wool_cream"),
+                                            fleece="fleece", hair="hair_brown",
+                                            beard="hair_brown"), 13),
+    ("Youth", "male", pose_youth, dict(skin="skin_fair", tunic="wool_ochre", mantle=("shoulders", 1.1, 1.1, "wool_rust"),
+                                       hair="hair_dark", wrap="wool_rust"), 14),
+    ("Elder", "male", pose_elder, dict(skin="skin_old", tunic="wool_dark", mantle=("shoulders", 1.3, 1.5, "wool_grey"),
+                                       hair="hair_grey", beard="hair_grey", wrap="linen"), 15),
+]
+
+
+def people(only=None):
+    """The cast, built once and kept in art/build/nativity-figures.blend (draping the cloth takes
+    some minutes); rebuilt whenever this file changes. Call in an empty scene.
+    Returns {name: root object}."""
+    path = os.path.join(ART_DIR, "build", "nativity-figures.blend")
+    wanted = [c for c in CAST if not only or c[0] in only]
+    if not only and os.path.exists(path) and os.path.getmtime(path) >= os.path.getmtime(os.path.abspath(__file__)):
+        with bpy.data.libraries.load(path) as (src, dst):
+            dst.objects = list(src.objects)
+        for o in dst.objects:
+            bpy.context.collection.objects.link(o)
+        print("[art] figures: reused " + path)
+        return {c[0]: bpy.data.objects[c[0]] for c in CAST}
+    before = set(bpy.data.objects)
+    mats = figure_materials()
+    roots = {}
+    for name, kind, pose, look, seed in wanted:
+        roots[name] = figure(name, kind, pose, look, mats, seed)
+        print(f"[art] figures: built {name}")
+    if not only:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        bpy.data.libraries.write(path, {o for o in bpy.data.objects if o not in before}, fake_user=True)
+        print("[art] figures: saved " + path)
+    return roots
+
+
 if __name__ == "__main__":
+    # ART_ONLY=Mary,Joseph builds just those (not cached) for a quick look.
+    only = [n for n in os.environ.get("ART_ONLY", "").split(",") if n]
     reset()
     setup_render(res=900, samples=int(os.environ.get("ART_SAMPLES", 64)))
-    bpy.context.scene.render.resolution_x = 1300
-    m, jo = people()
-    m.location = (-0.75, 0, 0)
-    m.rotation_euler = (0, 0, deg(40))
-    jo.location = (0.75, 0, 0)
-    jo.rotation_euler = (0, 0, deg(-35))
+    bpy.context.scene.render.resolution_x = 1500
+    cast = people(only or None)
+    spots = {"Mary": (-0.85, 0.2, 55), "Joseph": (0.2, 0.9, -15), "Shepherd": (-1.9, -0.5, 100),
+             "Youth": (1.2, -0.6, -120), "Elder": (1.9, 0.5, -60)}
+    for i, (name, root) in enumerate(cast.items()):
+        x, y, yaw = spots[name]
+        if only:                                   # a close look: side by side, turned a little
+            x, y, yaw = (i - (len(cast) - 1) / 2) * 0.95, 0.0, 22 - 44 * (i % 2)
+        root.location = (x, y, 0)
+        root.rotation_euler = (0, 0, deg(yaw))
     shadow_catcher(size=20)
-    studio(target=(0, 0, 0.9), scale=1.1)
-    camera((0, -5.2, 1.25), (0, 0, 0.88), lens=50)
+    world(0.02, 0.03, 0.06, 0.6)
+    point_light("Lamp", (-0.2, -0.7, 0.35), 260, (1.0, 0.6, 0.25), radius=0.06)
+    area_light("Fill", (-3.0, -5.0, 3.0), (0, 0, 1.0), 220, 4.0, (0.7, 0.8, 1.0))
+    area_light("Warm", (2.0, -3.0, 1.2), (0, 0.3, 1.0), 260, 2.0, (1.0, 0.72, 0.42))
+    if only:
+        camera((0, -3.6, 1.25), (0, 0, 0.95), lens=42)
+    else:
+        camera((0, -6.4, 1.3), (0, 0.2, 0.9), lens=40)
     render(os.path.join(out_dir(), "figures-test.png"))
