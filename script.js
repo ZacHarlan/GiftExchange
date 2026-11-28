@@ -676,6 +676,154 @@ class MusicService {
     }
 }
 
+// --- Snow ---
+
+// Falling snow, drawn on a canvas. One renderer for the whole app, so the gift picker and the
+// Christmas countdown show exactly the same snow: three depths of soft flakes drifting on a
+// light wind. setLevel(0..1) says how hard it is snowing (see ChristmasCountdown.snowLevel in
+// countdown.js: it grows steadily over the 30 days before Christmas).
+class SnowField {
+    constructor(canvas) {
+        this.canvas = canvas || null;
+        this.ctx = SnowField.context(this.canvas);
+        this.level = 0;
+        this.w = 0;
+        this.h = 0;
+        this.layers = [];
+        this.sprite = null;
+        this.frame = null;
+    }
+
+    static context(canvas) {
+        try {
+            return canvas && typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    setLevel(level) {
+        this.level = Math.min(1, Math.max(0, Number(level) || 0));
+    }
+
+    // How many of a layer's flakes fall at the current level: a quarter of them at the
+    // lightest, all of them at the heaviest.
+    falling(flakes) {
+        return Math.round(flakes.length * (0.25 + 0.75 * this.level));
+    }
+
+    // Lays out enough flakes for the heaviest snowfall over a w x h area. The layout is the
+    // same every time, so the snow does not jump when a window is resized.
+    layout(width, height) {
+        this.w = Math.max(1, Math.round(width));
+        this.h = Math.max(1, Math.round(height));
+        let seed = 20261225;
+        const rnd = () => {
+            seed = (seed * 1664525 + 1013904223) >>> 0;
+            return seed / 4294967296;
+        };
+        const area = Math.min(2.2, Math.max(0.35, (this.w * this.h) / (1280 * 720)));
+        const make = (count, rMin, rMax, vMin, vMax, alpha) => ({
+            alpha,
+            flakes: Array.from({ length: Math.round(count * area) }, () => ({
+                x: rnd() * this.w, y: rnd() * this.h,
+                r: rMin + rnd() * (rMax - rMin),
+                v: vMin + rnd() * (vMax - vMin),
+                sway: 6 + rnd() * 22, f: 0.3 + rnd() * 0.9, phase: rnd() * Math.PI * 2,
+            })),
+        });
+        this.layers = [
+            make(440, 0.6, 1.3, 14, 28, 0.55),
+            make(270, 1.3, 2.4, 32, 58, 0.8),
+            make(95, 3, 6.5, 70, 125, 0.5),
+        ];
+    }
+
+    softFlake() {
+        if (this.sprite || typeof document === 'undefined') return this.sprite;
+        const size = 32;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = SnowField.context(canvas);
+        if (!ctx) return null;
+        const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+        g.addColorStop(0, 'rgba(255,255,255,1)');
+        g.addColorStop(0.25, 'rgba(255,255,255,0.75)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, size, size);
+        this.sprite = canvas;
+        return canvas;
+    }
+
+    // Paints the snow as it is `t` seconds in, onto any canvas context of the laid-out size.
+    paint(ctx, t) {
+        if (!ctx) return;
+        const { w, h } = this;
+        const sprite = this.softFlake();
+        ctx.fillStyle = '#ffffff';
+        this.layers.forEach((layer, depth) => {
+            const soft = depth === 2 && sprite;
+            const count = this.falling(layer.flakes);
+            ctx.globalAlpha = layer.alpha;
+            if (!soft) ctx.beginPath();
+            for (let i = 0; i < count; i++) {
+                const fl = layer.flakes[i];
+                const y = (fl.y + t * fl.v) % (h + 20) - 10;
+                const x = ((fl.x + Math.sin(t * fl.f + fl.phase) * fl.sway + t * fl.v * 0.12) % (w + 20) + w + 20) % (w + 20) - 10;
+                if (soft) {
+                    ctx.drawImage(sprite, x - fl.r * 2, y - fl.r * 2, fl.r * 4, fl.r * 4);
+                } else {
+                    ctx.moveTo(x + fl.r, y);
+                    ctx.arc(x, y, fl.r, 0, Math.PI * 2);
+                }
+            }
+            if (!soft) ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+    }
+
+    // Sizes this field's own canvas to the window.
+    fit(view) {
+        if (!this.ctx) return;
+        const dpr = Math.min(2, Math.max(1, view.devicePixelRatio || 1));
+        const w = view.innerWidth;
+        const h = view.innerHeight;
+        this.canvas.width = Math.round(w * dpr);
+        this.canvas.height = Math.round(h * dpr);
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this.layout(w, h);
+    }
+
+    drawOwn(t) {
+        if (!this.ctx) return;
+        this.ctx.clearRect(0, 0, this.w, this.h);
+        this.paint(this.ctx, t);
+    }
+
+    // Runs the snow behind the page. It rests while `paused()` is true (the countdown, which
+    // draws its own copy, is covering the page) and stands still for reduced-motion visitors.
+    run(view, paused = () => false) {
+        if (!this.ctx || !view || !view.requestAnimationFrame) return;
+        this.fit(view);
+        view.addEventListener('resize', () => {
+            this.fit(view);
+            this.drawOwn(30);
+        });
+        let still = false;
+        try {
+            still = Boolean(view.matchMedia && view.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        } catch (_) { }
+        this.drawOwn(30);
+        if (still) return;
+        const loop = ms => {
+            if (!paused()) this.drawOwn(ms / 1000);
+            this.frame = view.requestAnimationFrame(loop);
+        };
+        this.frame = view.requestAnimationFrame(loop);
+    }
+}
+
 // --- Analytics ---
 // Google Analytics 4, on the live site only (owner decision 2026-11-17).
 //
@@ -936,16 +1084,13 @@ class EventDetails {
         const budgetText = EventDetails.formatBudget(budget);
         const days = EventDetails.daysUntil(date, today);
         let countdown = '';
-        let snow = 'normal';
         if (days !== null && days >= 0) {
             countdown = days === 0 ? "Today's the day! 🎉" : days === 1 ? 'Tomorrow!' : `${days} days to go`;
-            snow = days <= 3 ? 'blizzard' : days <= 14 ? 'heavy' : 'normal';
         }
         return {
             budget: budgetText ? `${budgetText} limit` : '',
             date: EventDetails.formatDate(date),
             countdown,
-            snow,
         };
     }
 
@@ -1847,7 +1992,6 @@ class UIManager {
 
     renderEventBanner() {
         const info = EventDetails.describe(this.eventDetails(), this.now());
-        document.body.dataset.snow = info.snow;
         if (!this.eventBanner) return;
         const pieces = [['🎁', info.budget], ['📅', info.date], ['⏳', info.countdown]].filter(([, text]) => text);
         this.eventBanner.replaceChildren(...pieces.map(([icon, text]) => {
@@ -2203,6 +2347,10 @@ if (typeof document !== 'undefined') {
         const animationService = new AnimationService(sound);
         const ui = new UIManager(exchangeService, animationService, undefined, undefined, sound, undefined, undefined, new MusicService(), new AnalyticsService());
 
+        // The same snow falls behind this page and on the Christmas countdown.
+        const pageSnow = new SnowField(document.getElementById('snowCanvas'));
+        pageSnow.run(window, () => document.hidden || document.body.classList.contains('countdown-open'));
+
         // Countdown to Christmas (countdown.js, loaded after this file) shares the sound service.
         const countdownRoot = document.getElementById('countdownScreen');
         if (countdownRoot && typeof CountdownUI !== 'undefined') {
@@ -2210,8 +2358,10 @@ if (typeof document !== 'undefined') {
                 root: countdownRoot,
                 openers: [document.getElementById('countdownBtn')].filter(Boolean),
                 sound,
+                snow: new SnowField(),
                 now: CountdownUI.clockFor(window.location.hash),
                 onOpen: () => ui.analytics.track('countdown_open'),
+                onSnowLevel: level => pageSnow.setLevel(level),
             });
         }
     });
@@ -2225,6 +2375,7 @@ if (typeof module !== 'undefined' && module.exports) {
         PartyReveal,
         MusicService,
         AnalyticsService,
+        SnowField,
         GuidedTour,
         TOUR_STEPS,
         SoundService,

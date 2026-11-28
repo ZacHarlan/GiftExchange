@@ -20,7 +20,7 @@ If `bash init.sh` fails, fixing it **is** the task.
 | App | Static, single-page, vanilla JS — `index.html` + `script.js` + `style.css`. No build step, no backend, no database. |
 | Data | Browser only. `localStorage` keys `giftExchange.participants` (versioned JSON `{version:1, participants:[{firstName,lastName,familyGroup,wishlist}]}` — reuse it for new features), `giftExchange.coreFamilies`, `giftExchange.theme`, `giftExchange.badSanta` (saved Bad Santa game), `giftExchange.showBadSanta` (`'true'` shows Bad Santa; hidden by default), `giftExchange.tourSeen` (`'1'` once the guided tour was finished, skipped or declined), `giftExchange.music` (`'off'` turns background music off), `giftExchange.guaranteedMatches` (the Settings box as typed, one `Giver -> Receiver` per line; `GiftExchangeService.setFixedPairs` makes those givers always buy for those receivers, over the family and last-year rules). Names/wishlists never leave the browser. |
 | Analytics | Google Analytics 4 via `AnalyticsService` in `script.js` (owner decision 2026-11-17). Loads the Google tag script only when `GA_MEASUREMENT_ID` is set (`GTM-MF62QPXB`, reporting to GA4 property `G-PE51JMC1XH`) **and** the page is on `zacharlan.github.io`; never on localhost or in tests. Sends a page view plus `draw_names` (count, theme), `share` (copy/email/print), `tour_start`, `countdown_open`, `theme_change`. Only events, parameters and values on its allowlist can be sent, so never names, wishlists or family groups. |
-| Art | Blender 5.2 (Cycles) scene scripts in `art/` → `art/post.py` (Pillow) → `assets/*.webp`. Rebuild: `bash art/render.sh`. |
+| Art | Blender 5.2 (Cycles) scene scripts in `art/` → `art/post.py` (Pillow) → `assets/*.webp`. Rebuild: `bash art/render.sh` (or name scenes: `bash art/render.sh countdown`; `post.py` only rebuilds the scenes named, so a stale render in `art/build` cannot replace live art). The countdown's Mary and Joseph (`art/figures.py`) start from Blender Studio's CC0 *Human Base Meshes*, which `art/render.sh` downloads to `~/Library/Caches/giftexchange-art` (not in the repo); they are posed, dressed with simulated cloth and cached in `art/build/nativity-figures.blend`. |
 | Runtime (dev) | Node ≥ 18 (developed on 26), npm 11 |
 | Dev server | `scripts/serve.js` (zero-dependency) → http://localhost:8085, `GET /health` → `{"status":"ok"}` |
 | Unit tests | Jest 30 + jsdom (`tests/unit/`, `tests/architecture/`) |
@@ -40,6 +40,7 @@ All app code is in `script.js`, in layers. Arrows = "may depend on".
     mailto)             │
         ├──▶ ParticipantStore   (saves the list; storage injected)
         ├──▶ AnimationService   (overlay animation only; knows nothing about people)
+        ├──▶ SnowField          (the falling snow, on canvas; one renderer for the page and the countdown)
         └──▶ AnalyticsService   (Google Analytics; live site only; allowlisted events, no user data)
 ```
 
@@ -69,7 +70,7 @@ Wiring happens once at the bottom of `script.js` (`DOMContentLoaded`) — servic
 | `index.html` | Markup; every element the JS touches has an `id`. |
 | `script.js` | All app logic: `Person`, `GiftExchangeService`, `AnimationService`, `AnalyticsService`, `UIManager`. |
 | `bad-santa.js` | Bad Santa (white elephant) mode: `BadSantaGame` (pure engine), `BadSantaStore` (`giftExchange.badSanta`), `BadSantaUI`. Loaded after `script.js`. |
-| `countdown.js` | Countdown to Christmas, a full-screen screen opened by `#countdownBtn` or a link ending in `#countdown` (`#countdown=finale` previews the last 20 seconds): `ChristmasCountdown` (pure date maths), `CountdownScene` (canvas night scene), `CountdownUI` (flip clock, final ten, Christmas Day). Loaded after `bad-santa.js`; wired in `script.js` so it shares the `SoundService`. Stores nothing. |
+| `countdown.js` | Countdown to Christmas, a full-screen Nativity scene opened by `#countdownBtn` or a link ending in `#countdown` (`#countdown=finale` previews the last 20 seconds): `ChristmasCountdown` (pure date maths, incl. `snowLevel`), `CountdownScene` (canvas: starry sky and the Star of Bethlehem drawn live, over the rendered valley `assets/countdown-land.webp`; `COUNTDOWN_LAND` holds where the stable sits in that picture), `CountdownUI` (flip clock, final ten, Christmas Day). Loaded after `bad-santa.js`; wired in `script.js` so it shares `SoundService` and `SnowField`. Stores nothing. |
 | `style.css` | All styling. Palettes are CSS custom properties per `body[data-theme="christmas|hanukkah"]`. |
 | `art/` | Blender scene scripts (`art/common.py` helpers, one file per scene), `art/post.py`, `art/render.sh`. |
 | `assets/` | Rendered WebP art and sprite sheets (generated — edit `art/`, then re-render), plus `music-christmas.mp3` (background music, Pixabay licence; used for both themes). |

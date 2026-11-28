@@ -111,7 +111,13 @@ def exists(*names):
 
 
 def main():
-    if exists("gift.png", "gift-open.png"):
+    # `python3 art/post.py hero countdown` rebuilds only those; with no names, everything that
+    # has a render in art/build. (Never rebuild a picture nobody asked for: an old render lying
+    # in art/build would silently replace the art on the live page.)
+    only = set(sys.argv[1:])
+    want = lambda scene: not only or scene in only
+
+    if want("gift") and exists("gift.png", "gift-open.png"):
         closed, opened = load("gift.png"), load("gift-open.png")
         box = content_box([closed, opened])
         save(square_crop(closed, box), "gift.webp", 440)
@@ -124,11 +130,11 @@ def main():
         save(edge_fade(bloom(o, threshold=225, radius=o.width // 28, strength=1.2), inner=0.7), "gift-open.webp", 440)
 
     for still in ("latkes", "gelt", "gelt-coin"):
-        if exists(f"{still}.png"):
+        if want(still.split("-")[0]) and exists(f"{still}.png"):
             im = load(f"{still}.png")
             save(square_crop(im, content_box([im])), f"{still}.webp", 400 if still != "gelt-coin" else 160)
 
-    if exists("hero.png"):
+    if want("hero") and exists("hero.png"):
         im = load("hero.png")
         x0, y0, x1, y1 = content_box([im])
         pad = int((x1 - x0) * 0.06)
@@ -149,8 +155,18 @@ def main():
         im.save(os.path.join(ASSETS, "hero.webp"), "WEBP", quality=86, method=6)
         print(f"[post] hero.webp  {im.width}x{im.height}  {os.path.getsize(os.path.join(ASSETS, 'hero.webp')) // 1024} KB")
 
+    if want("countdown") and exists("countdown-land.png"):
+        # The Nativity valley for the Christmas countdown: the whole 16:9 frame, sky left
+        # transparent (countdown.js draws the sky and the star behind it). A light bloom lets
+        # the lantern and the lit windows glow.
+        im = bloom(load("countdown-land.png"), threshold=238, radius=9, strength=0.55, tint=(255, 196, 120))
+        im = im.resize((2240, 1260), Image.LANCZOS)
+        path = os.path.join(ASSETS, "countdown-land.webp")
+        im.save(path, "WEBP", quality=84, method=6)
+        print(f"[post] countdown-land.webp  {im.width}x{im.height}  {os.path.getsize(path) // 1024} KB")
+
     menorah = [f"menorah_{i}.png" for i in range(10)]
-    if exists(*menorah):
+    if want("menorah") and exists(*menorah):
         frames = [load(n) for n in menorah]
         box = content_box(frames)
         frames = [bloom(square_crop(f, box), threshold=215, radius=10, strength=1.3) for f in frames]
@@ -158,7 +174,7 @@ def main():
         save(frames[-1], "menorah.webp", 360)
 
     dreidel = [f"dreidel_{i:02d}.png" for i in range(24)]
-    if exists(*dreidel):
+    if want("dreidel") and exists(*dreidel):
         frames = [load(n) for n in dreidel]
         box = content_box(frames)
         sprite([square_crop(f, box) for f in frames], "dreidel-sprite.webp", 300)

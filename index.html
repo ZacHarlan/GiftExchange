@@ -20,7 +20,7 @@
 
 <body data-theme="christmas" class="bad-santa-off">
     <div class="sky" aria-hidden="true"></div>
-    <div class="snow" aria-hidden="true"><i></i><i></i><i></i></div>
+    <canvas id="snowCanvas" class="snow" aria-hidden="true"></canvas>
 
     <main class="container">
         <div class="lights" aria-hidden="true">
@@ -43,7 +43,7 @@
             <h1>Holiday Gift Exchange</h1>
             <p class="tagline">Add everyone, press the big button, and let the holiday magic pick.</p>
             <p id="eventBanner" class="event-banner hidden" aria-live="polite"></p>
-            <button id="countdownBtn" class="countdown-btn" type="button"><span aria-hidden="true">🎄</span> <span class="countdown-btn-text">Countdown to Christmas</span> <span class="countdown-btn-go" aria-hidden="true">›</span></button>
+            <button id="countdownBtn" class="countdown-btn" type="button"><span aria-hidden="true">✨</span> <span class="countdown-btn-text">Countdown to Christmas</span> <span class="countdown-btn-go" aria-hidden="true">›</span></button>
             <div id="tourInvite" class="tour-invite hidden">
                 <span>New here? A one-minute tour shows you around.</span>
                 <button id="tourInviteStart" class="chip-btn" type="button">Show me around</button>
@@ -245,15 +245,15 @@
     <!-- Countdown to Christmas: a full-screen winter night (see countdown.js) -->
     <section id="countdownScreen" class="countdown hidden" role="dialog" aria-modal="true" aria-labelledby="countdownTitle" tabindex="-1">
         <canvas id="countdownSky" class="countdown-canvas" aria-hidden="true"></canvas>
-        <img id="countdownTree" class="countdown-tree" src="assets/hero.webp" alt="" width="1000" height="475">
         <canvas id="countdownSnow" class="countdown-canvas countdown-front" aria-hidden="true"></canvas>
         <div class="countdown-content">
-            <p class="countdown-eyebrow"><span aria-hidden="true">✦</span> The countdown is on <span aria-hidden="true">✦</span></p>
+            <p class="countdown-eyebrow"><span aria-hidden="true">✦</span> Counting down to Christmas <span aria-hidden="true">✦</span></p>
             <h2 id="countdownTitle" class="countdown-title">Christmas is coming</h2>
             <div id="countdownClock" class="countdown-clock" role="timer"></div>
             <p id="countdownBig" class="countdown-big" aria-hidden="true"></p>
             <p id="countdownSleeps" class="countdown-sleeps" aria-live="polite"></p>
             <p id="countdownDate" class="countdown-date"></p>
+            <p id="countdownVerse" class="countdown-verse"></p>
         </div>
         <div class="countdown-controls">
             <button id="countdownFullscreen" class="countdown-control" type="button" aria-label="Full screen (F)" title="Full screen (F)">⛶</button>

@@ -32,21 +32,11 @@ describe('EventDetails (budget, date, countdown)', () => {
             budget: '$50 limit',
             date: 'Thu, Dec 24',
             countdown: '12 days to go',
-            snow: 'heavy',
         });
         expect(EventDetails.describe({ date: '2026-12-13' }, today).countdown).toBe('Tomorrow!');
         expect(EventDetails.describe({ date: '2026-12-12' }, today).countdown).toBe("Today's the day! 🎉");
         expect(EventDetails.describe({ date: '2026-12-01' }, today).countdown).toBe('');
-        expect(EventDetails.describe({}, today)).toEqual({ budget: '', date: '', countdown: '', snow: 'normal' });
-    });
-
-    test('snow gets heavier as the day approaches', () => {
-        const snowOn = (date) => EventDetails.describe({ date }, day(2026, 12, 1)).snow;
-        expect(snowOn('2027-01-20')).toBe('normal'); // 50 days out
-        expect(snowOn('2026-12-15')).toBe('heavy');  // 14 days
-        expect(snowOn('2026-12-04')).toBe('blizzard'); // 3 days
-        expect(snowOn('2026-12-01')).toBe('blizzard'); // today
-        expect(snowOn('2026-11-20')).toBe('normal'); // already past
+        expect(EventDetails.describe({}, today)).toEqual({ budget: '', date: '', countdown: '' });
     });
 
     test('summaryLine is used in copied and emailed results', () => {
@@ -97,7 +87,6 @@ describe('UIManager: event banner', () => {
         expect(banner.textContent).toContain('$50 limit');
         expect(banner.textContent).toContain('Thu, Dec 24');
         expect(banner.textContent).toContain('4 days to go');
-        expect(document.body.dataset.snow).toBe('heavy'); // 4 days out
         expect(localStorage.getItem('giftExchange.budget')).toBe('50');
         expect(localStorage.getItem('giftExchange.date')).toBe('2026-12-24');
     });
