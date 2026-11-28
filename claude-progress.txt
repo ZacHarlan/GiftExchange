@@ -156,3 +156,30 @@ DECISIONS (mine):
          - No new art rendered: the scene is drawn in code around the existing hero tree picture.
          - #countdown=finale is a preview clock (20 s before midnight) so the ending can be seen any day.
 TESTS  : unit+arch 223 -> 245; e2e 18 -> 21. Checked by screenshot at 1600x900 and 390x844.
+
+--- 2026-11-28  claude-fable-5-2 / Nativity countdown + shared snow (feat/heavier-snow) ---
+OWNER FEEDBACK on the first countdown (PR #19), in order: snow should get heavier towards Christmas;
+         graphics "cartoon", Santa "looks like a snowman", sleigh trail awful; it must be "elegant, beautiful
+         and cheerful"; "get rid of santa and make this more about the birth of Jesus"; "make the people look
+         like real people" ("Mary looks like a bell"); same snow on the gift picker and the countdown;
+         "put the tree back" on the landing page (see LESSON).
+DONE   : - Countdown rebuilt as a Nativity scene. art/countdown.py renders the valley (terrain, mountains,
+           needle firs with snow pads, log cabins, chapel, stable with manger) with a transparent sky ->
+           assets/countdown-land.webp. art/figures.py builds Mary and Joseph from Blender Studio's CC0 Human
+           Base Meshes: simple armature + auto weights, posed (aim/reach/pitch helpers), tunic = inflated
+           body, skirt and mantle = cloth simulation, hair/beard caps; cached in art/build.
+         - countdown.js: Santa, moon, aurora, drawn village, tree picture and fireworks all removed. Sky,
+           stars, Star of Bethlehem (halo, rays, light on the stable) drawn on canvas; clock set left,
+           navy/gold; Luke 2:14, and Isaiah 9:6 + "Joy to the world" on Christmas Day. Bell, not sleigh bells.
+         - SnowField (script.js): one snow renderer for #snowCanvas on the main page and the countdown;
+           level from ChristmasCountdown.snowLevel (30-day ramp). CSS snow and EventDetails' data-snow removed.
+LESSON : art/post.py used to rebuild EVERY asset it found a render for. Running it for the countdown
+         replaced assets/hero.webp (the landing-page tree) from a stale art/build/hero.png until I restored
+         it with git. post.py now takes scene names and render.sh passes them. Also: common.cube() bakes
+         location into the mesh, so rotate cubes with countdown.turn(), not rotation_euler.
+DECISIONS (mine): stable right of centre with the clock on the left; snowy valley rather than Bethlehem
+         (owner wants the snow); KJV verses (public domain); the main page's snow now follows Christmas,
+         not the exchange date; hero.py refactored into build_tree_and_gifts() but NOT re-rendered.
+NOT DONE / KNOWN: the child in the manger is a swaddled bundle, not a modelled baby; faces are the base
+         mesh's neutral face; no shepherds, animals or wise men.
+TESTS  : unit+arch 245 -> 256; e2e 21 -> 23.

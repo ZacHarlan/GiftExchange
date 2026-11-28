@@ -223,55 +223,59 @@ def star(z):
 from mathutils import Matrix  # noqa: E402
 import random  # noqa: E402
 
-reset()
-setup_render(res=1400, samples=192)
-s = bpy.context.scene
-s.render.resolution_x, s.render.resolution_y = 1600, 760
-rng = random.Random(12)
+def build_tree_and_gifts(rng):
+    """The decorated tree with five presents, standing at the origin. Used here and by countdown.py."""
+    crimson = (gift.wrapping_paper((0.36, 0.008, 0.025), (1.0, 0.7, 0.25), "Crimson"), gift.satin("GoldRibbon", (1.0, 0.68, 0.18)))
+    emerald = (gift.wrapping_paper((0.01, 0.16, 0.06), (1.0, 0.75, 0.3), "Emerald", scale=12), gift.satin("RedRibbon", (0.7, 0.02, 0.05)))
+    royal = (gift.wrapping_paper((0.02, 0.06, 0.38), (0.85, 0.87, 0.92), "Royal", scale=11), gift.satin("SilverRibbon", (0.9, 0.92, 0.96)))
+    golden = (gift.wrapping_paper((0.55, 0.36, 0.08), (0.95, 0.95, 0.9), "Golden", scale=13), crimson[1].copy())
+    bsdf(golden[1]).inputs["Base Color"].default_value = (0.7, 0.02, 0.05, 1)
+    ivory = (gift.wrapping_paper((0.75, 0.72, 0.66), (0.8, 0.05, 0.07), "Ivory", scale=10), emerald[1])
 
-crimson = (gift.wrapping_paper((0.36, 0.008, 0.025), (1.0, 0.7, 0.25), "Crimson"), gift.satin("GoldRibbon", (1.0, 0.68, 0.18)))
-emerald = (gift.wrapping_paper((0.01, 0.16, 0.06), (1.0, 0.75, 0.3), "Emerald", scale=12), gift.satin("RedRibbon", (0.7, 0.02, 0.05)))
-royal = (gift.wrapping_paper((0.02, 0.06, 0.38), (0.85, 0.87, 0.92), "Royal", scale=11), gift.satin("SilverRibbon", (0.9, 0.92, 0.96)))
-golden = (gift.wrapping_paper((0.55, 0.36, 0.08), (0.95, 0.95, 0.9), "Golden", scale=13), crimson[1].copy())
-bsdf(golden[1]).inputs["Base Color"].default_value = (0.7, 0.02, 0.05, 1)
-ivory = (gift.wrapping_paper((0.75, 0.72, 0.66), (0.8, 0.05, 0.07), "Ivory", scale=10), emerald[1])
+    TREE_Y = 0.9
+    branches = tree(rng)
+    light_string(rng)
+    garland()
+    star(TREE_TOP + 0.24)
 
-TREE_Y = 0.9
-branches = tree(rng)
-light_string(rng)
-garland()
-star(TREE_TOP + 0.24)
+    # Ornaments hung from the branch tips, mostly on the side facing the camera.
+    palette = [((0.8, 0.04, 0.06), True), ((1.0, 0.72, 0.25), True), ((0.78, 0.8, 0.86), True),
+               ((0.05, 0.12, 0.5), True), ((0.85, 0.04, 0.08), True), ((1.0, 0.72, 0.25), True)]
+    front = [b for b in branches if math.sin(b[0]) < -0.25]
+    rng.shuffle(front)
+    used = []
+    k = 0
+    for a, mid, L, h in front:
+        tip = Vector((math.cos(a), math.sin(a), 0)) * (0.9 * L)
+        tip.z = h - 0.2 * L
+        r = 0.17 + 0.08 * min(1, L / TREE_R) + rng.uniform(-0.015, 0.015)
+        if h > TREE_TOP - 0.8 or any((tip - u).length < 0.68 for u in used):
+            continue
+        used.append(tip)
+        col, met = palette[k % len(palette)]
+        k += 1
+        c = tip + Vector((math.cos(a), math.sin(a), 0)) * 0.12
+        ornament((c.x, c.y, c.z - 0.16 - r), r, col, met, hang_to=tip)
 
-# Ornaments hung from the branch tips, mostly on the side facing the camera.
-palette = [((0.8, 0.04, 0.06), True), ((1.0, 0.72, 0.25), True), ((0.78, 0.8, 0.86), True),
-           ((0.05, 0.12, 0.5), True), ((0.85, 0.04, 0.08), True), ((1.0, 0.72, 0.25), True)]
-front = [b for b in branches if math.sin(b[0]) < -0.25]
-rng.shuffle(front)
-used = []
-k = 0
-for a, mid, L, h in front:
-    tip = Vector((math.cos(a), math.sin(a), 0)) * (0.9 * L)
-    tip.z = h - 0.2 * L
-    r = 0.17 + 0.08 * min(1, L / TREE_R) + rng.uniform(-0.015, 0.015)
-    if h > TREE_TOP - 0.8 or any((tip - u).length < 0.68 for u in used):
-        continue
-    used.append(tip)
-    col, met = palette[k % len(palette)]
-    k += 1
-    c = tip + Vector((math.cos(a), math.sin(a), 0)) * 0.12
-    ornament((c.x, c.y, c.z - 0.16 - r), r, col, met, hang_to=tip)
+    for o in [o for o in bpy.data.objects if o.parent is None and o.type in ("MESH", "CURVE", "LIGHT")]:
+        o.location.y += TREE_Y
 
-for o in [o for o in bpy.data.objects if o.parent is None and o.type in ("MESH", "CURVE", "LIGHT")]:
-    o.location.y += TREE_Y
+    place(closed_gift(*crimson, loop_yaw=18), (-0.3, -1.1, 0), -18, (0.95, 0.95, 1.0))
+    place(closed_gift(*emerald, loop_yaw=-22), (-2.75, -0.55, 0), 22, (0.82, 0.82, 0.72))
+    place(closed_gift(*royal, loop_yaw=40), (2.2, -0.75, 0), -40, (0.72, 0.72, 0.85))
+    place(closed_gift(*golden, loop_yaw=-10), (-4.0, -0.75, 0), 14, (0.55, 0.55, 0.5))
+    place(closed_gift(*ivory, loop_yaw=30), (3.75, -1.1, 0), -30, (0.58, 0.58, 0.62))
 
-place(closed_gift(*crimson, loop_yaw=18), (-0.3, -1.1, 0), -18, (0.95, 0.95, 1.0))
-place(closed_gift(*emerald, loop_yaw=-22), (-2.75, -0.55, 0), 22, (0.82, 0.82, 0.72))
-place(closed_gift(*royal, loop_yaw=40), (2.2, -0.75, 0), -40, (0.72, 0.72, 0.85))
-place(closed_gift(*golden, loop_yaw=-10), (-4.0, -0.75, 0), 14, (0.55, 0.55, 0.5))
-place(closed_gift(*ivory, loop_yaw=30), (3.75, -1.1, 0), -30, (0.58, 0.58, 0.62))
 
-shadow_catcher(size=30)
-studio(target=(0, 0, 1.6), scale=1.4)
-# Wide enough that the star's top point stays inside the frame (post.py crops to content).
-camera((0.2, -12.5, 3.2), (0, 0, 2.5), lens=34)
-render(os.path.join(OUT, "hero.png"))
+if __name__ == "__main__":
+    reset()
+    setup_render(res=1400, samples=192)
+    s = bpy.context.scene
+    s.render.resolution_x, s.render.resolution_y = 1600, 760
+    rng = random.Random(12)
+    build_tree_and_gifts(rng)
+    shadow_catcher(size=30)
+    studio(target=(0, 0, 1.6), scale=1.4)
+    # Wide enough that the star's top point stays inside the frame (post.py crops to content).
+    camera((0.2, -12.5, 3.2), (0, 0, 2.5), lens=34)
+    render(os.path.join(OUT, "hero.png"))

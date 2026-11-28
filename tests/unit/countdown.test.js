@@ -42,6 +42,19 @@ describe('ChristmasCountdown', () => {
         expect(ChristmasCountdown.sleepsLine(at(2026, 11, 25, 8, 0, 0))).toBe('Merry Christmas!');
     });
 
+    test('snow gets steadily heavier over the last 30 days', () => {
+        const level = (...args) => ChristmasCountdown.snowLevel(at(...args));
+        expect(level(2026, 6, 4, 12, 0, 0)).toBe(0);                 // summer: the lightest fall
+        expect(level(2026, 10, 25, 0, 0, 0)).toBe(0);                // exactly 30 days out
+        expect(level(2026, 11, 10, 0, 0, 0)).toBeCloseTo(0.5, 5);    // 15 days out
+        expect(level(2026, 11, 24, 23, 59, 59)).toBeGreaterThan(0.999);
+        expect(level(2026, 11, 25, 9, 0, 0)).toBe(1);                // Christmas Day
+        expect(level(2026, 11, 26, 9, 0, 0)).toBe(0);                // and back to light for next year
+        const days = [28, 21, 14, 7, 3, 1].map(d => level(2026, 11, 25 - d, 12, 0, 0));
+        expect([...days].sort((a, b) => a - b)).toEqual(days);       // every step closer is heavier
+        expect(level(2026, 11, 24, 12, 0, 0)).toBeGreaterThan(level(2026, 11, 24, 11, 59, 59));   // even second by second
+    });
+
     test('what a screen reader hears', () => {
         expect(ChristmasCountdown.spoken(at(2026, 11, 23, 22, 57, 30))).toBe('1 day, 1 hour and 2 minutes until Christmas');
         expect(ChristmasCountdown.spoken(at(2026, 11, 25, 8, 0, 0))).toBe('It is Christmas Day');
@@ -50,12 +63,48 @@ describe('ChristmasCountdown', () => {
 
 describe('CountdownScene', () => {
     test('does nothing, safely, where there is no canvas to draw on', () => {
-        const scene = new CountdownScene(null, null);
-        scene.resize(800, 600, 2, null);
-        scene.setFireworks(true);
+        const snow = { setLevel: jest.fn(), layout: jest.fn(), paint: jest.fn() };
+        const scene = new CountdownScene(null, null, snow);
+        scene.resize(800, 600, 2);
+        scene.setGlory(true);
         expect(() => scene.draw(1)).not.toThrow();
         expect(scene.ready()).toBe(false);
+        expect(snow.paint).not.toHaveBeenCalled();
         expect(CountdownScene.context({ getContext: () => { throw new Error('no canvas'); } })).toBeNull();
+    });
+
+    test('passes the snow level on to the shared snow', () => {
+        const snow = { setLevel: jest.fn(), layout: jest.fn(), paint: jest.fn() };
+        new CountdownScene(null, null, snow).setSnow(0.4);
+        expect(snow.setLevel).toHaveBeenCalledWith(0.4);
+        expect(() => new CountdownScene(null, null).setSnow(0.4)).not.toThrow();
+    });
+
+    test('on a wide screen the valley covers it and the star hangs high over the stable', () => {
+        const at = CountdownScene.place(1600, 900);
+        expect(at).toMatchObject({ x: 0, y: 0, dw: 1600, dh: 900 });
+        expect(at.roof.x).toBeCloseTo(0.7731 * 1600, 0);
+        expect(at.star.x).toBe(at.roof.x);                  // directly above the stable
+        expect(at.star.y).toBeLessThan(at.roof.y - 200);
+        expect(at.star.y).toBeGreaterThan(900 * 0.15);      // never lost off the top
+        expect(at.manger.y).toBeGreaterThan(at.roof.y);
+    });
+
+    test('on a phone the valley is smaller, the stable is centred and the star sits just above it', () => {
+        const at = CountdownScene.place(390, 844);
+        expect(at.dh).toBeCloseTo(844 * 0.7, 3);            // leaves the top of the screen to the clock
+        expect(at.y + at.dh).toBeCloseTo(844, 3);           // standing on the bottom edge
+        expect(at.roof.x).toBeCloseTo(195, 3);
+        expect(at.x).toBeLessThan(0);
+        expect(at.x + at.dw).toBeGreaterThan(390);          // no gap at either side
+        expect(at.star.y).toBeGreaterThan(844 * 0.5);
+        expect(at.star.y).toBeLessThan(at.roof.y);
+    });
+
+    test('on a very wide screen the valley still spans the full width', () => {
+        const at = CountdownScene.place(2560, 1080);
+        expect(at.dw).toBe(2560);
+        expect(at.y + at.dh).toBeCloseTo(1080, 3);
     });
 });
 
@@ -68,6 +117,7 @@ describe('CountdownUI', () => {
             <p id="countdownBig"></p>
             <p id="countdownSleeps"></p>
             <p id="countdownDate"></p>
+            <p id="countdownVerse"></p>
             <button id="countdownFullscreen"></button>
             <button id="countdownClose"></button>
         </section>`;
@@ -77,15 +127,17 @@ describe('CountdownUI', () => {
         document.body.innerHTML = DOM;
         clock = new Date(...start);
         const sound = { play: jest.fn() };
+        const snow = { setLevel: jest.fn(), layout: jest.fn(), paint: jest.fn() };
+        const onSnowLevel = jest.fn();
         const onOpen = jest.fn();
         const ui = new CountdownUI({
             root: document.getElementById('countdownScreen'),
             openers: [document.getElementById('countdownBtn')],
-            sound, onOpen,
+            sound, onOpen, snow, onSnowLevel,
             now: () => new Date(clock.getTime()),
             ...extra,
         });
-        return { ui, sound, onOpen, root: document.getElementById('countdownScreen'), btn: document.getElementById('countdownBtn') };
+        return { ui, sound, onOpen, snow, onSnowLevel, root: document.getElementById('countdownScreen'), btn: document.getElementById('countdownBtn') };
     }
     const advance = (ui, seconds) => { clock = new Date(clock.getTime() + seconds * 1000); ui.tick(false); };
     const shown = unit => document.querySelector(`[data-unit="${unit}"] .cd-digits`).dataset.value;
@@ -100,15 +152,20 @@ describe('CountdownUI', () => {
         jest.useRealTimers();
     });
 
-    test('the button on the main page says how many sleeps are left', () => {
-        const { btn } = make([2026, 10, 28, 8, 17, 30]);
+    test('the button on the main page says how many sleeps are left, and the page is told how hard it is snowing', () => {
+        const { btn, onSnowLevel } = make([2026, 10, 28, 8, 17, 30]);
         expect(btn.textContent).toBe('27 sleeps until Christmas');
+        expect(onSnowLevel).toHaveBeenLastCalledWith(expect.closeTo(1 - (26 * 86400 + 15 * 3600 + 42 * 60 + 30) / (30 * 86400), 6));
+        clock = new Date(2026, 11, 20, 8, 0, 0);
+        jest.advanceTimersByTime(60000);                 // refreshed every minute
+        expect(btn.textContent).toBe('5 sleeps until Christmas');
+        expect(onSnowLevel).toHaveBeenLastCalledWith(expect.closeTo(1 - (4 * 86400 + 16 * 3600) / (30 * 86400), 6));
         expect(make([2026, 11, 24, 8, 0, 0]).btn.textContent).toBe('1 sleep until Christmas');
         expect(make([2026, 11, 25, 8, 0, 0]).btn.textContent).toBe('Merry Christmas!');
     });
 
-    test('opening shows the clock, plays the bells, reports the open and marks the address', () => {
-        const { root, btn, sound, onOpen } = make([2026, 10, 28, 8, 17, 30]);
+    test('opening shows the clock, rings a bell, reports the open and marks the address', () => {
+        const { root, btn, sound, onOpen, snow } = make([2026, 10, 28, 8, 17, 30]);
         expect(root.classList.contains('hidden')).toBe(true);
         btn.click();
         expect(root.classList.contains('hidden')).toBe(false);
@@ -119,7 +176,9 @@ describe('CountdownUI', () => {
         expect(document.getElementById('countdownSleeps').textContent).toBe('27 sleeps to go');
         expect(document.getElementById('countdownDate').textContent).toMatch(/2026/);
         expect(document.getElementById('countdownClock').getAttribute('aria-label')).toBe('26 days, 15 hours and 42 minutes until Christmas');
-        expect(sound.play).toHaveBeenCalledWith('jingle');
+        expect(sound.play).toHaveBeenCalledWith('chime');
+        expect(document.getElementById('countdownVerse').textContent).toMatch(/Glory to God in the highest.*Luke 2:14/);
+        expect(snow.setLevel).toHaveBeenLastCalledWith(expect.closeTo(1 - (26 * 86400 + 15 * 3600 + 42 * 60 + 30) / (30 * 86400), 6));   // 26 days out: light
         expect(onOpen).toHaveBeenCalledTimes(1);
         expect(window.location.hash).toBe('#countdown');
         expect(document.activeElement.id).toBe('countdownClose');
@@ -165,8 +224,8 @@ describe('CountdownUI', () => {
         expect(sound.play).toHaveBeenCalledWith('chime');
     });
 
-    test('the last ten seconds become one big number, then Christmas arrives with fireworks', () => {
-        const { ui, btn, sound, root } = make([2026, 11, 24, 23, 59, 48]);
+    test('the last ten seconds become one big number, then Christmas arrives and the star shines its brightest', () => {
+        const { ui, btn, sound, root, snow } = make([2026, 11, 24, 23, 59, 48]);
         btn.click();
         expect(root.classList.contains('final-minute')).toBe(true);
         expect(root.classList.contains('final-ten')).toBe(false);
@@ -182,7 +241,10 @@ describe('CountdownUI', () => {
         expect(root.classList.contains('final-ten')).toBe(false);
         expect(document.getElementById('countdownTitle').textContent).toBe('Merry Christmas!');
         expect(document.getElementById('countdownBig').textContent).toBe('');
-        expect(ui.scene.fireworks).toBe(true);
+        expect(document.getElementById('countdownSleeps').textContent).toBe('Joy to the world, the Lord is come');
+        expect(document.getElementById('countdownVerse').textContent).toMatch(/unto us a child is born.*Isaiah 9:6/);
+        expect(ui.scene.glory).toBe(true);
+        expect(snow.setLevel).toHaveBeenLastCalledWith(1);
         expect(sound.play).toHaveBeenCalledWith('tada');
     });
 
@@ -190,7 +252,7 @@ describe('CountdownUI', () => {
         const { btn, sound, root } = make([2026, 11, 25, 10, 0, 0]);
         btn.click();
         expect(root.classList.contains('is-christmas')).toBe(true);
-        expect(document.getElementById('countdownSleeps').textContent).toMatch(/Christmas Day/);
+        expect(document.getElementById('countdownSleeps').textContent).toMatch(/Joy to the world/);
         expect(sound.play).not.toHaveBeenCalledWith('tada');
     });
 
