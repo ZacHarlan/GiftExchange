@@ -90,6 +90,17 @@ def radial_glow(size, center, radius, color=(255, 205, 120), max_alpha=170):
     return g
 
 
+def night_haze(im, depth, color=(26, 40, 78), strength=0.62):
+    """Aerial perspective: the further away something is, the more it takes on the colour of
+    the night air — so each ridge stands a little paler than the one in front of it.
+    `depth` is art/countdown.py's depth picture (black = near, white = far)."""
+    far = depth.convert("L").point(lambda v: int(255 * strength * (v / 255) ** 1.25))
+    far = far.filter(ImageFilter.GaussianBlur(1.2))
+    hazed = Image.composite(Image.new("RGB", im.size, color), im.convert("RGB"), far)
+    hazed.putalpha(im.getchannel("A"))
+    return hazed
+
+
 def save(im, name, size):
     im = im.resize((size, size), Image.LANCZOS) if im.width != size else im
     path = os.path.join(ASSETS, name)
@@ -156,13 +167,16 @@ def main():
         print(f"[post] hero.webp  {im.width}x{im.height}  {os.path.getsize(os.path.join(ASSETS, 'hero.webp')) // 1024} KB")
 
     if want("countdown") and exists("countdown-land.png"):
-        # The Nativity valley for the Christmas countdown: the whole 16:9 frame, sky left
-        # transparent (countdown.js draws the sky and the star behind it). A light bloom lets
-        # the lantern and the lit windows glow.
-        im = bloom(load("countdown-land.png"), threshold=238, radius=9, strength=0.55, tint=(255, 196, 120))
-        im = im.resize((2240, 1260), Image.LANCZOS)
+        # Bethlehem for the Christmas countdown: the whole 16:9 frame, sky left transparent
+        # (countdown.js draws the sky and the star behind it).
+        im = load("countdown-land.png")
+        if exists("countdown-depth.png"):
+            im = night_haze(im, load("countdown-depth.png").resize(im.size, Image.BILINEAR))
+        # A light bloom lets the lamps, the fire and the lit windows glow.
+        im = bloom(im, threshold=236, radius=max(6, im.width // 260), strength=0.6, tint=(255, 190, 110))
+        im = im.resize((2560, 1440), Image.LANCZOS)
         path = os.path.join(ASSETS, "countdown-land.webp")
-        im.save(path, "WEBP", quality=84, method=6)
+        im.save(path, "WEBP", quality=82, method=6)
         print(f"[post] countdown-land.webp  {im.width}x{im.height}  {os.path.getsize(path) // 1024} KB")
 
     menorah = [f"menorah_{i}.png" for i in range(10)]

@@ -98,6 +98,7 @@ class CountdownScene {
         this.w = 0;
         this.h = 0;
         this.glory = false;        // Christmas Day: the star at its brightest
+        this.drift = true;         // a very slow move in and out, like a held camera shot
         this.land = null;
         this.lastT = 0;
         this.onReady = null;       // called when the picture arrives, so a still scene can repaint
@@ -167,50 +168,113 @@ class CountdownScene {
         this.unit = Math.min(w, h * 1.7);
         this.at = CountdownScene.place(w, h);
 
-        // Stars: many faint, a few bright; fewer close to the great star so it stands alone.
+        // The stars that twinkle: a few hundred, most of them faint, a handful bright.
         this.stars = [];
-        const count = Math.round(Math.min(900, (w * h) / 2400));
+        const count = Math.round(Math.min(700, (w * h) / 3000));
         for (let i = 0; i < count; i++) {
-            const bright = rnd() < 0.05;
+            const size = Math.pow(rnd(), 5);                       // most stars are small
             this.stars.push({
-                x: rnd() * w, y: Math.pow(rnd(), 1.25) * h * 0.74,
-                r: bright ? 1.1 + rnd() * 0.8 : 0.35 + rnd() * 0.65,
-                a: bright ? 0.75 + rnd() * 0.25 : 0.25 + rnd() * 0.55,
+                x: rnd() * w, y: Math.pow(rnd(), 1.2) * h * 0.72,
+                r: 0.5 + size * 1.5,
+                a: 0.35 + 0.65 * Math.pow(rnd(), 1.5) + size * 0.3,
                 speed: 0.5 + rnd() * 1.9, phase: rnd() * Math.PI * 2,
-                tint: rnd() < 0.22 ? '#ffe7c4' : rnd() < 0.3 ? '#cfe0ff' : '#f4f7ff',
+                tint: rnd() < 0.2 ? '#ffe2bd' : rnd() < 0.3 ? '#c9dcff' : '#f4f7ff',
                 festive: rnd() < 0.09,
             });
         }
 
-        // The sky itself, painted once: deep blue overhead, a cold glow along the horizon, and a
-        // faint band of far-off stars across it.
+        // The sky itself, painted once: deep blue overhead, paler towards the hills, thousands
+        // of faint stars too small to twinkle, and the Milky Way arching across it.
         const sky = document.createElement('canvas');
         sky.width = Math.round(w * this.dpr);
         sky.height = Math.round(h * this.dpr);
         const c = sky.getContext('2d');
         c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         const g = c.createLinearGradient(0, 0, 0, h);
-        g.addColorStop(0, '#02040f');
-        g.addColorStop(0.3, '#050d24');
-        g.addColorStop(0.5, '#0b1838');
-        g.addColorStop(0.64, '#16264f');
-        g.addColorStop(1, '#16264f');
+        g.addColorStop(0, '#01030c');
+        g.addColorStop(0.28, '#040b20');
+        g.addColorStop(0.48, '#0a1736');
+        g.addColorStop(0.62, '#172a57');
+        g.addColorStop(1, '#172a57');
         c.fillStyle = g;
         c.fillRect(0, 0, w, h);
+
+        const span = Math.hypot(w, h);
+        const tilt = -0.5;
+        const bandAt = d => ({ x: w * 0.34 + Math.cos(tilt) * d, y: h * 0.27 + Math.sin(tilt) * d });
         c.save();
-        c.translate(w * 0.38, h * 0.3);
-        c.rotate(-0.42);
-        c.scale(1, 0.2);
-        const band = c.createRadialGradient(0, 0, 0, 0, 0, Math.max(w, h) * 0.75);
-        band.addColorStop(0, 'rgba(150,175,255,0.16)');
-        band.addColorStop(0.5, 'rgba(120,150,240,0.06)');
-        band.addColorStop(1, 'rgba(120,150,240,0)');
-        c.fillStyle = band;
-        c.beginPath();
-        c.arc(0, 0, Math.max(w, h) * 0.75, 0, Math.PI * 2);
-        c.fill();
+        c.translate(w * 0.34, h * 0.27);
+        c.rotate(tilt);
+        for (const [height, alpha] of [[0.2, 0.1], [0.11, 0.1], [0.05, 0.09]]) {       // its soft glow, in layers
+            c.save();
+            c.scale(1, height);
+            const band = c.createRadialGradient(0, 0, 0, 0, 0, span * 0.62);
+            band.addColorStop(0, `rgba(170,190,255,${alpha})`);
+            band.addColorStop(0.6, `rgba(130,160,245,${alpha * 0.4})`);
+            band.addColorStop(1, 'rgba(120,150,240,0)');
+            c.fillStyle = band;
+            c.beginPath();
+            c.arc(0, 0, span * 0.62, 0, Math.PI * 2);
+            c.fill();
+            c.restore();
+        }
+        c.restore();
+        const gauss = () => (rnd() + rnd() + rnd() + rnd() - 2) / 2;                    // roughly bell-shaped, -1..1
+        const dust = Math.round(Math.min(9000, (w * h) / 260));
+        for (let i = 0; i < dust; i++) {
+            let x, y;
+            if (i % 5 < 3) {                                                             // three in five lie along the Milky Way
+                const p = bandAt((rnd() - 0.5) * span * 1.2);
+                const across = gauss() * h * 0.085;
+                x = p.x - Math.sin(tilt) * across;
+                y = p.y + Math.cos(tilt) * across;
+            } else {
+                x = rnd() * w;
+                y = Math.pow(rnd(), 1.15) * h * 0.74;
+            }
+            const faint = Math.pow(rnd(), 2.2);
+            c.globalAlpha = 0.12 + 0.5 * faint;
+            c.fillStyle = rnd() < 0.15 ? '#ffe6c8' : '#e8eeff';
+            const r = 0.25 + faint * 0.55;
+            c.fillRect(x - r, y - r, r * 2, r * 2);
+        }
+        c.globalAlpha = 1;
+        // Dark lanes of dust through the band.
+        c.save();
+        c.translate(w * 0.34, h * 0.27);
+        c.rotate(tilt);
+        c.globalCompositeOperation = 'multiply';
+        for (let i = 0; i < 7; i++) {
+            const lx = (rnd() - 0.5) * span * 0.9;
+            const ly = (rnd() - 0.5) * h * 0.06;
+            const rx = span * (0.05 + rnd() * 0.09);
+            const lane = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+            lane.addColorStop(0, 'rgba(20,26,52,0.55)');
+            lane.addColorStop(1, 'rgba(255,255,255,1)');
+            c.save();
+            c.translate(lx, ly);
+            c.scale(1, 0.16 + rnd() * 0.12);
+            c.fillStyle = lane;
+            c.beginPath();
+            c.arc(0, 0, rx, 0, Math.PI * 2);
+            c.fill();
+            c.restore();
+        }
         c.restore();
         this.sky = sky;
+
+        // Darkened corners, as a lens would give, to hold the eye on the light.
+        const shade = document.createElement('canvas');
+        shade.width = 256;
+        shade.height = 256;
+        const v = shade.getContext('2d');
+        const corner = v.createRadialGradient(128, 128, 60, 128, 128, 182);
+        corner.addColorStop(0, 'rgba(0,0,0,0)');
+        corner.addColorStop(0.6, 'rgba(0,0,6,0.12)');
+        corner.addColorStop(1, 'rgba(0,0,6,0.55)');
+        v.fillStyle = corner;
+        v.fillRect(0, 0, 256, 256);
+        this.shade = shade;
 
         this.glow = CountdownScene.softDot(128, '255,240,205');
         this.warm = CountdownScene.softDot(96, '255,196,110');
@@ -239,11 +303,20 @@ class CountdownScene {
         b.drawImage(this.sky, 0, 0, w, h);
         this.drawStars(b, t);
         this.drawShootingStar(b, t);
+        // The star and the land drift in and out together, a few percent over a minute and a
+        // half, centred on the manger — so the picture breathes without anyone noticing why.
+        const zoom = this.drift ? 1 + 0.035 * (0.5 - 0.5 * Math.cos((t * 2 * Math.PI) / 90)) : 1;
+        b.save();
+        b.translate(at.manger.x, at.manger.y);
+        b.scale(zoom, zoom);
+        b.translate(-at.manger.x, -at.manger.y);
         this.drawStar(b, t);
         if (this.land) {
             b.drawImage(this.land, at.x, at.y, at.dw, at.dh);
             this.drawLamplight(b, t);
         }
+        b.restore();
+        b.drawImage(this.shade, 0, 0, w, h);
     }
 
     drawStars(ctx, t) {
@@ -256,6 +329,11 @@ class CountdownScene {
             ctx.beginPath();
             ctx.arc(s.x, s.y, s.r * (lift > 1 ? 1.3 : 1), 0, Math.PI * 2);
             ctx.fill();
+            if (s.r > 1.25) {                                      // the brightest have a soft halo
+                const halo = s.r * 9;
+                ctx.globalAlpha *= 0.35;
+                ctx.drawImage(this.glow, s.x - halo / 2, s.y - halo / 2, halo, halo);
+            }
         }
         ctx.globalAlpha = 1;
     }
@@ -403,6 +481,7 @@ class CountdownUI {
         this.verse = find('countdownVerse');
         this.scene = new CountdownScene(find('countdownSky'));
         this.scene.onReady = () => { if (this.isOpen() && this.stillScene()) this.scene.draw(30); };
+        this.scene.drift = !this.stillScene();
 
         this.units = {};
         this.buildClock();
