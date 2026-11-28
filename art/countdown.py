@@ -765,13 +765,6 @@ def land():
     for name, (loc, yaw) in places.items():
         cast[name].location = loc
         cast[name].rotation_euler = (0, 0, deg(yaw))
-    # Quieter weaves than the cast was built with: bold stripes read as a pattern, not as wool.
-    plain = {"WoolDark": "WoolBrown"}
-    for o in bpy.data.objects:
-        if o.type in ("MESH", "CURVE"):
-            for slot in o.material_slots:
-                if slot.material and slot.material.name in plain:
-                    slot.material = bpy.data.materials[plain[slot.material.name]]
     # Lamps: one on a stone by the manger, one on a ledge of the wall; and the gentle light
     # painters have always let fall from the child.
     stone = boulder(rng, mats["limestone"], 0.2)

@@ -211,3 +211,11 @@ TESTS  : unit+arch 256; e2e 23.
          thousands of faint stars and the Milky Way painted into the sky, halos on bright stars, darkened
          corners, and a 3.5% drift in and out over 90 s (off under reduced motion). unit 257.
          Still weak: sheep (smooth, toy-like) and faces close up.
+         2026-11-28 later still: owner: "half the people's bodies aren't connected". True: each skirt was a
+         wide upright tube pinned to a fixed circle, so a leaning or kneeling torso sat loose inside it.
+         Fixed in figures.py: skirt_cloth() now takes the wearer's own waist outline (waist_outline) as its
+         pinned top edge and the belt follows it. Also removed strand hair/beards (bushes) and the strand
+         fleece (spikes): hair is a close cap with a combed bump. Shepherds wear plain belted tunics (their
+         shoulder cloaks tore over bent arms); Joseph's mantle is worn over the head.
+LESSON : look at the figures CLOSE UP in plain light (cache + a neutral camera) before judging them in the
+         scene; at scene size and in lamplight the gaps were invisible to me and obvious to the owner.
