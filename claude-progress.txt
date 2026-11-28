@@ -219,3 +219,12 @@ TESTS  : unit+arch 256; e2e 23.
          shoulder cloaks tore over bent arms); Joseph's mantle is worn over the head.
 LESSON : look at the figures CLOSE UP in plain light (cache + a neutral camera) before judging them in the
          scene; at scene size and in lamplight the gaps were invisible to me and obvious to the owner.
+         2026-11-28, again: owner: the boy has horizontal stripes "for some strange reason"; make the animals
+         photo-realistic; only part of the roof is thatched (feat/real-sheep). Done: wool_ochre is plain.
+         New art/animals.py: sheep from blended metaball volumes (barrel, chest, rump, neck, leg muscle,
+         fat tail), separate head with Roman nose, drooping ears, tapered legs, hooves, and a true fleece
+         of fine crimped, clumped fibres. Roof: reeds on a 60x36 grid, RAND distribution, laid down the
+         slope with object_align, plus a fringe on every edge.
+LESSON : hair particles. use_advanced_hair=False -> hair_length IS the length (use for fur/wool).
+         use_advanced_hair=True -> length follows emission speed, hair_length barely matters (0.007 came
+         out ~15 cm). Default "JIT" distribution left the ends of a big-faced roof bare: use "RAND".
