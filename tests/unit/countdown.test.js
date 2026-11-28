@@ -281,6 +281,14 @@ describe('CountdownUI', () => {
         expect(root.classList.contains('idle')).toBe(false);
     });
 
+    test('the picture drifts slowly, except for visitors who ask for reduced motion', () => {
+        const { ui } = make([2026, 10, 28, 8, 17, 30]);
+        expect(ui.scene.drift).toBe(true);
+        const calm = { ...window, matchMedia: () => ({ matches: true }), addEventListener() { }, setInterval: () => 0, location: window.location };
+        const still = make([2026, 10, 28, 8, 17, 30], { view: calm });
+        expect(still.ui.scene.drift).toBe(false);
+    });
+
     test('full screen is asked for, and failures are ignored', () => {
         const { btn, root } = make([2026, 10, 28, 8, 17, 30]);
         btn.click();

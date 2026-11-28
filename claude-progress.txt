@@ -204,3 +204,10 @@ LESSONS: strand length in Blender follows emission speed -> keep normal+random f
          Blender occasionally dies at start with an NSException on macOS: just run it again.
          A regex clean-up once removed `curl=0.0` from a def signature; check signatures after bulk edits.
 TESTS  : unit+arch 256; e2e 23.
+         2026-11-28 later: owner: "make the graphics even better" (feat/better-graphics). Scene: finely
+         modelled near ground with grit, pebbles and thin dry grass; chipped, individually toned stones;
+         stronger moonlight; lamplight in the village lanes; render at 3200x1800 -> 2560 webp; a depth
+         picture (countdown-depth.png) that post.py turns into night haze on the far hills. countdown.js:
+         thousands of faint stars and the Milky Way painted into the sky, halos on bright stars, darkened
+         corners, and a 3.5% drift in and out over 90 s (off under reduced motion). unit 257.
+         Still weak: sheep (smooth, toy-like) and faces close up.

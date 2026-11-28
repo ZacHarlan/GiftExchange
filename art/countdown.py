@@ -172,7 +172,7 @@ def strands(obj, mat, count, length, seed=1, children=4, thickness=0.012, curl=0
 # Materials
 # ---------------------------------------------------------------------------
 
-def varied(name, dark, light, roughness=0.9, bump=0.6, bump_scale=14.0, tex_scale=3.0):
+def varied(name, dark, light, roughness=0.9, bump=0.6, bump_scale=14.0, tex_scale=3.0, per_object=0.45):
     """A natural surface: two tones mixed by noise, a little different on every object, and rough."""
     m = principled(name, light, roughness=roughness, specular=0.25)
     nt = m.node_tree
@@ -183,7 +183,7 @@ def varied(name, dark, light, roughness=0.9, bump=0.6, bump_scale=14.0, tex_scal
     info = nt.nodes.new("ShaderNodeObjectInfo")
     add = nt.nodes.new("ShaderNodeMath")
     add.operation = "MULTIPLY_ADD"
-    add.inputs[1].default_value = 0.45
+    add.inputs[1].default_value = per_object
     ramp = nt.nodes.new("ShaderNodeValToRGB")
     ramp.color_ramp.elements[0].position = 0.35
     ramp.color_ramp.elements[0].color = (*dark, 1)
@@ -200,7 +200,7 @@ def varied(name, dark, light, roughness=0.9, bump=0.6, bump_scale=14.0, tex_scal
 
 def materials():
     return {
-        "limestone": varied("Limestone", (0.1, 0.085, 0.065), (0.36, 0.31, 0.24), bump=1.0, bump_scale=22.0, tex_scale=5.0),
+        "limestone": varied("Limestone", (0.07, 0.058, 0.044), (0.4, 0.34, 0.26), bump=1.0, bump_scale=26.0, tex_scale=6.0, per_object=0.75),
         "plaster": varied("MudPlaster", (0.3, 0.25, 0.18), (0.52, 0.45, 0.34), bump=0.35, bump_scale=6.0, tex_scale=1.4),
         "rock": varied("Rock", (0.08, 0.07, 0.055), (0.34, 0.3, 0.23), bump=1.0, bump_scale=9.0, tex_scale=2.6),
         "timber": varied("Timber", (0.07, 0.04, 0.02), (0.2, 0.12, 0.06), bump=0.7, bump_scale=30.0, tex_scale=9.0),
@@ -215,7 +215,7 @@ def materials():
         "wool": varied("SheepWool", (0.3, 0.27, 0.21), (0.56, 0.51, 0.42), roughness=0.95, bump=1.0, bump_scale=130.0, tex_scale=30.0),
         "sheep_face": principled("SheepFace", (0.12, 0.07, 0.04), roughness=0.8),
         "dark": principled("Doorway", (0.01, 0.008, 0.006), roughness=1.0),
-        "window": principled("LampWindow", (1.0, 0.7, 0.35), emission=(1.0, 0.55, 0.2), emission_strength=9.0),
+        "window": principled("LampWindow", (1.0, 0.7, 0.35), emission=(1.0, 0.55, 0.2), emission_strength=14.0),
         "flame": principled("Flame", (1.0, 0.75, 0.4), emission=(1.0, 0.52, 0.16), emission_strength=70.0),
         "fire": principled("Fire", (1.0, 0.6, 0.2), emission=(1.0, 0.4, 0.08), emission_strength=45.0),
         "child_skin": figures.skin_material("ChildSkin", (0.5, 0.3, 0.22)),
@@ -267,15 +267,42 @@ def terrain(mats):
         half = 34.0 + (y - CAM.y) * 0.95
         for i in range(nx + 1):
             x = -half * 1.25 + 2.25 * half * i / nx
-            verts.append((x, y, ground_height(x, y)))
+            inside = NEAR[0] + 1.5 < x < NEAR[1] - 1.5 and NEAR[2] + 1.5 < y < NEAR[3] - 1.5
+            verts.append((x, y, ground_height(x, y) - (0.35 if inside else 0.0)))     # tucked under the detailed patch
     for j in range(ny):
         for i in range(nx):
             a = j * (nx + 1) + i
             faces.append((a, a + 1, a + nx + 2, a + nx + 1))
     o = mesh_object("Terrain", verts, faces)
     # Dry earth where it is level, bare limestone where it is steep.
-    m = varied("Ground", (0.07, 0.055, 0.035), (0.2, 0.16, 0.105), bump=0.9, bump_scale=3.0, tex_scale=0.9)
+    m = varied("Ground", (0.06, 0.046, 0.03), (0.22, 0.175, 0.115), bump=0.9, bump_scale=3.0, tex_scale=0.5, per_object=0.0)
     nt = m.node_tree
+    # Grit and small pale stones bedded in the soil, and a fine roughness you can see up close.
+    tcg = nt.nodes.new("ShaderNodeTexCoord")
+    grit = nt.nodes.new("ShaderNodeTexVoronoi")
+    grit.inputs["Scale"].default_value = 9.0
+    speck = nt.nodes.new("ShaderNodeValToRGB")
+    speck.color_ramp.elements[0].position = 0.0
+    speck.color_ramp.elements[0].color = (1, 1, 1, 1)
+    speck.color_ramp.elements[1].position = 0.09
+    speck.color_ramp.elements[1].color = (0, 0, 0, 1)
+    pale = nt.nodes.new("ShaderNodeMixRGB")
+    pale.inputs["Color2"].default_value = (0.3, 0.27, 0.21, 1)
+    fine = nt.nodes.new("ShaderNodeTexNoise")
+    fine.inputs["Scale"].default_value = 60.0
+    fine.inputs["Detail"].default_value = 8.0
+    fine_bump = nt.nodes.new("ShaderNodeBump")
+    fine_bump.inputs["Strength"].default_value = 0.6
+    fine_bump.inputs["Distance"].default_value = 0.02
+    nt.links.new(tcg.outputs["Object"], grit.inputs["Vector"])
+    nt.links.new(tcg.outputs["Object"], fine.inputs["Vector"])
+    nt.links.new(grit.outputs["Distance"], speck.inputs["Fac"])
+    nt.links.new(speck.outputs["Color"], pale.inputs["Fac"])
+    nt.links.new(bsdf(m).inputs["Base Color"].links[0].from_socket, pale.inputs["Color1"])
+    nt.links.new(pale.outputs["Color"], bsdf(m).inputs["Base Color"])
+    nt.links.new(fine.outputs["Fac"], fine_bump.inputs["Height"])
+    nt.links.new(bsdf(m).inputs["Normal"].links[0].from_socket, fine_bump.inputs["Normal"])
+    nt.links.new(fine_bump.outputs["Normal"], bsdf(m).inputs["Normal"])
     geo = nt.nodes.new("ShaderNodeNewGeometry")
     sep = nt.nodes.new("ShaderNodeSeparateXYZ")
     steep = nt.nodes.new("ShaderNodeValToRGB")
@@ -292,6 +319,33 @@ def terrain(mats):
     nt.links.new(base, mix.inputs["Color1"])
     nt.links.new(mix.outputs["Color"], bsdf(m).inputs["Base Color"])
     assign(o, m)
+    return o
+
+
+NEAR = (-34.0, 16.0, -19.0, 30.0)          # x0, x1, y0, y1 of the finely modelled ground
+
+
+def near_ground(mats):
+    """The ground close to the camera, in detail: trodden earth, ruts, hollows and grit."""
+    x0, x1, y0, y1 = NEAR
+    nx, ny = 560, 540
+    verts, faces = [], []
+    for j in range(ny + 1):
+        y = y0 + (y1 - y0) * j / ny
+        for i in range(nx + 1):
+            x = x0 + (x1 - x0) * i / nx
+            p = Vector((x, y, 0.0))
+            micro = (0.05 * noise.noise(p * 0.9 + Vector((3, 0, 0))) + 0.022 * noise.noise(p * 3.1) + 0.008 * noise.noise(p * 11.0))
+            # The beaten path the shepherds came by, winding up from the valley to the shelter.
+            path_x = -1.2 - 0.55 * (y + 1.0) * 0.0 + 2.2 * math.sin((y + 14.0) * 0.16) - 0.25 * (y + 15.0) * (1 if y < -1 else 0) * 0.0
+            on_path = 1 - smoothstep((abs(x - path_x) - 0.55) / 0.8) if y < -0.8 else 0.0
+            verts.append((x, y, ground_height(x, y) + 0.02 + micro * (1 - 0.6 * on_path) - 0.035 * on_path))
+    for j in range(ny):
+        for i in range(nx):
+            a = j * (nx + 1) + i
+            faces.append((a, a + 1, a + nx + 2, a + nx + 1))
+    o = mesh_object("NearGround", verts, faces)
+    assign(o, bpy.data.materials["Ground"])
     return o
 
 
@@ -400,6 +454,13 @@ def cypress(mats, height=8.0):
 # Buildings
 # ---------------------------------------------------------------------------
 
+def stone_texture():
+    tex = bpy.data.textures.get("StoneChips") or bpy.data.textures.new("StoneChips", "CLOUDS")
+    tex.noise_scale = 0.16
+    tex.noise_depth = 3
+    return tex
+
+
 def stone_wall(mats, rng, start, end, height, thickness=0.42, ragged=True):
     """A dry-stone wall: courses of field stone roughly squared with a hammer — no two alike,
     none quite level, the top course broken."""
@@ -425,6 +486,15 @@ def stone_wall(mats, rng, start, end, height, thickness=0.42, ragged=True):
             high = ch * rng.uniform(0.86, 1.0)
             centre = a + along * min(length, s + bl / 2) + across * rng.uniform(-0.035, 0.035) + Vector((0, 0, z + high / 2))
             block = cube("Block", (bl - 0.02, thickness * rng.uniform(0.8, 1.08), high - 0.012), tuple(centre), bevel=0.05)
+            # Knocked into shape with a hammer: faces that are never quite flat.
+            sub = block.modifiers.new("Subsurf", "SUBSURF")
+            sub.subdivision_type = "SIMPLE"
+            sub.levels = sub.render_levels = 2
+            chip = block.modifiers.new("Chipped", "DISPLACE")
+            chip.texture = stone_texture()
+            chip.texture_coords = "GLOBAL"
+            chip.strength = 0.05
+            chip.mid_level = 0.5
             turn(block, tuple(centre), (deg(rng.uniform(-4, 4)), deg(rng.uniform(-4, 4)), yaw + deg(rng.uniform(-5, 5))))
             assign(block, mats["limestone"])
             s += bl
@@ -625,6 +695,30 @@ def watch_fire(mats, rng):
     return new_objects(before)
 
 
+def depth_picture(scene, path):
+    """A second, quick render in which brightness means distance (black = here, white = 420 m
+    away). art/post.py uses it to lay night haze over the far hills, so they stand apart."""
+    m = bpy.data.materials.new("DepthOnly")
+    nt = m.node_tree
+    nt.nodes.clear()
+    cam = nt.nodes.new("ShaderNodeCameraData")
+    rng_ = nt.nodes.new("ShaderNodeMapRange")
+    rng_.inputs["From Min"].default_value = 16.0
+    rng_.inputs["From Max"].default_value = 420.0
+    emit = nt.nodes.new("ShaderNodeEmission")
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(cam.outputs["View Distance"], rng_.inputs["Value"])
+    nt.links.new(rng_.outputs["Result"], emit.inputs["Color"])
+    nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+    bpy.context.view_layer.material_override = m
+    scene.cycles.samples = 12
+    scene.cycles.use_denoising = False
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.look = "None"
+    scene.view_settings.exposure = 0.0
+    render(path)
+
+
 def anchors(scene, cam):
     """Where the shelter lands in the picture, as fractions of its width and height.
     countdown.js hangs the Star of Bethlehem over it, so copy these into COUNTDOWN_LAND there."""
@@ -640,9 +734,9 @@ def anchors(scene, cam):
 
 def land():
     reset()
-    setup_render(res=1440, samples=256)
+    setup_render(res=1800, samples=320)
     s = bpy.context.scene
-    s.render.resolution_x, s.render.resolution_y = 2560, 1440
+    s.render.resolution_x, s.render.resolution_y = 3200, 1800
     s.view_settings.look = "AgX - Medium High Contrast"
     s.view_settings.exposure = 0.35
     world(0.03, 0.05, 0.12, 0.2)                   # a clear night sky
@@ -651,11 +745,12 @@ def land():
     mats = materials()
 
     terrain(mats)
+    near_ground(mats)
     rock_face(mats)
 
     # Starlight from high above and behind the shelter, and a faint cool fill from the front.
-    sun("Starlight", (-0.28, -0.62, -0.73), 0.42, (0.66, 0.77, 1.0), angle=1.5)
-    sun("SkyFill", (0.3, 0.8, -0.5), 0.07, (0.5, 0.62, 1.0), angle=40)
+    sun("Starlight", (-0.28, -0.62, -0.73), 0.95, (0.62, 0.74, 1.0), angle=1.5)
+    sun("SkyFill", (0.3, 0.8, -0.5), 0.1, (0.5, 0.62, 1.0), angle=40)
 
     # --- The shelter and everyone in it -------------------------------------
     shelter(mats, rng)
@@ -704,20 +799,23 @@ def land():
 
     # --- The ground near at hand ---------------------------------------------
     rng = random.Random(2)
-    stones = [into_collection([boulder(rng, mats["limestone"], sz)], f"Stone{i}") for i, sz in enumerate((0.12, 0.2, 0.32, 0.5))]
+    stones = [into_collection([boulder(rng, mats["rock"], sz)], f"Stone{i}") for i, sz in enumerate((0.12, 0.2, 0.32, 0.5))]
     tuft_obj = sphere("Tuft", 0.16, (0, 0, -0.1), scale=(1, 1, 0.5), segments=8)
     assign(tuft_obj, mats["earth"])
-    strands(tuft_obj, mats["dry_grass"], 140, 0.2, children=4, thickness=0.004, random_dir=0.3)
+    strands(tuft_obj, mats["dry_grass"], 260, 0.22, children=5, thickness=0.0028, random_dir=0.28)
     tuft = into_collection([tuft_obj], "Tuft")
-    for i in range(1500):
-        x, y = rng.uniform(-34, 16), rng.uniform(-15, 46) if i % 3 else rng.uniform(-15, 0)
-        if math.hypot(x, y - 0.6) < 3.6 or (abs(x) < 3 and -15 < y < -1):
+    for i in range(5200):
+        x, y = rng.uniform(-34, 16), rng.uniform(-17, 46) if i % 3 else rng.uniform(-17, 2)
+        if math.hypot(x, y - 0.6) < 3.4:
             continue
         z = ground_height(x, y)
-        if rng.random() < 0.5:
-            instance(rng.choice(stones[:3] if rng.random() < 0.93 else stones), (x, y, z - 0.03), rng.uniform(0, 6.28), rng.uniform(0.4, 1.3))
+        roll = rng.random()
+        if roll < 0.62:                                                 # pebbles and grit
+            instance(stones[0], (x, y, z + 0.0), rng.uniform(0, 6.28), rng.uniform(0.12, 0.5))
+        elif roll < 0.78:                                               # stones
+            instance(rng.choice(stones[:3] if rng.random() < 0.95 else stones), (x, y, z - 0.03), rng.uniform(0, 6.28), rng.uniform(0.4, 1.1))
         else:
-            instance(tuft, (x, y, z), rng.uniform(0, 6.28), rng.uniform(0.7, 1.6))
+            instance(tuft, (x, y, z), rng.uniform(0, 6.28), rng.uniform(0.6, 1.5))
 
     # --- Trees ------------------------------------------------------------------
     rng = random.Random(3)
@@ -755,8 +853,10 @@ def land():
         if all(math.hypot(x - px, y - py) > 8.5 for px, py in spots):
             spots.append((x, y))
     spots += [(-27.0, 66.0), (-36.0, 74.0), (-19.0, 82.0), (-58.0, 80.0)]          # a few houses below the village
-    for x, y in spots:
+    for k, (x, y) in enumerate(spots):
         instance(rng.choice(homes), (x, y, ground_height(x, y) - 0.25), deg(rng.uniform(-40, 40) + rng.choice([0, 0, 90])), rng.uniform(0.9, 1.1))
+        if k % 4 == 0:                                                  # lamplight spilling into the lanes
+            point_light("LaneLight", (x + 3.0, y - 4.5, ground_height(x, y) + 1.6), 340, (1.0, 0.55, 0.22), radius=0.3)
 
     # --- The shepherds' watch fire, out in the fields ------------------------------
     rng = random.Random(6)
@@ -771,6 +871,7 @@ def land():
     bpy.context.view_layer.update()
     anchors(s, cam)
     render(os.path.join(OUT, "countdown-land.png"))
+    depth_picture(s, os.path.join(OUT, "countdown-depth.png"))
 
 
 land()
